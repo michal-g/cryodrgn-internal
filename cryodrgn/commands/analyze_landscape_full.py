@@ -50,7 +50,9 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         help="Epoch number N to analyze (1-based indexing, "
         "corresponding to z.N.pkl and weights.N.pkl)",
     )
+
     parser.add_argument("--device", type=int, help="Optionally specify CUDA device")
+
     parser.add_argument(
         "--landscape-dir",
         type=os.path.abspath,
@@ -205,9 +207,9 @@ def generate_and_map_volumes(zfile, cfg, weights, mask_mrc, pca_obj_pkl, outdir,
         sorted(np.random.choice(len(z_all), args.training_volumes, replace=False))
     )  # type: ignore
     z_sample = z_all[ind]
-    utils.save_pkl(z_sample, f"{outdir}/z.sampled.pkl")
-    utils.save_pkl(ind, f"{outdir}/ind.sampled.pkl")
-    logger.info(f"Saved {outdir}/z.sampled.pkl")
+    utils.save_pkl(z_sample, os.path.join(outdir, "z.sampled.pkl"))
+    utils.save_pkl(ind, os.path.join(outdir, "ind.sampled.pkl"))
+    logger.info(f"Saved {os.path.join(outdir, 'z.sampled.pkl')}")
 
     # Set the device
     # if torch.cuda.is_available():
@@ -264,32 +266,38 @@ def generate_and_map_volumes(zfile, cfg, weights, mask_mrc, pca_obj_pkl, outdir,
     # Generate volumes
     logger.info(f"Generating {len(z)} volume embeddings")
     t1 = dt.now()
-    embeddings = []
-    for i, zz in enumerate(z):
-        if (i + 1) % 100 == 0:
-            logger.info(f"Generating volume {i + 1} of {len(z)}")
+    embeddings = list()
 
-        if args.downsample:
-            extent = lattice.extent * (args.downsample / (D - 1))
-            vol = decoder.eval_volume(
-                lattice.get_downsample_coords(args.downsample + 1),
-                args.downsample + 1,
-                extent,
-                norm,
-                zz,
+    def generate_embeddings(i_list, z_list):
+        embedding_list = list()
+
+        for i, zz in zip(i_list, z_list):
+            if (i + 1) % 100 == 0:
+                logger.info(f"Generating volume {i + 1} of {len(z)}")
+
+            if args.downsample:
+                extent = lattice.extent * (args.downsample / (D - 1))
+                vol = decoder.eval_volume(
+                    lattice.get_downsample_coords(args.downsample + 1),
+                    args.downsample + 1,
+                    extent,
+                    norm,
+                    zz,
+                )
+            else:
+                vol = decoder.eval_volume(
+                    lattice.coords, lattice.D, lattice.extent, norm, zz
+                )
+            if args.flip:
+                vol = vol.flip([0])
+
+            embedding_list.append(
+                pca.transform(vol.cpu()[torch.tensor(mask).bool()].reshape(1, -1))
             )
-        else:
-            vol = decoder.eval_volume(
-                lattice.coords, lattice.D, lattice.extent, norm, zz
-            )
 
-        if args.flip:
-            vol = vol.flip([0])
+        return np.concatenate(embedding_list, axis=0)
 
-        embeddings.append(
-            pca.transform(vol.cpu()[torch.tensor(mask).bool()].reshape(1, -1))
-        )
-
+    embeddings = generate_embeddings(list(range(len(z))), z)
     embeddings = np.array(embeddings).reshape(len(z), -1).astype(np.float32)
     td = dt.now() - t1
     logger.info(f"Finished generating {args.training_volumes} volumes in {td}")
@@ -337,7 +345,7 @@ def train_model(x, y, outdir, zfile, args):
 
     # Evaluate
     model.eval()
-    yhat_all = []
+    yhat_all = list()
     eval_dataset = utils.load_pkl(zfile).astype(np.float32)
     with torch.no_grad():
         for x in np.array_split(eval_dataset, args.test_batch_size):
@@ -346,7 +354,7 @@ def train_model(x, y, outdir, zfile, args):
             yhat_all.append(yhat.detach().cpu().numpy())
 
     yhat_all = np.concatenate(yhat_all)
-    torch.save(model.state_dict(), f"{outdir}/model.pt")
+    torch.save(model.state_dict(), os.path.join(outdir, "model.pt"))
 
     return yhat_all
 
@@ -375,20 +383,25 @@ def main(args: argparse.Namespace) -> None:
 
     E = args.epoch
     workdir = args.workdir
-    zfile = f"{workdir}/z.{E}.pkl"
-    weights = f"{workdir}/weights.{E}.pkl"
+    zfile = os.path.join(workdir, f"z.{E}.pkl")
+    weights = os.path.join(workdir, f"weights.{E}.pkl")
     cfg = (
-        f"{workdir}/config.yaml"
+        os.path.join(workdir, "config.yaml")
         if os.path.exists(f"{workdir}/config.yaml")
-        else f"{workdir}/config.pkl"
+        else os.path.join(workdir, "config.pkl")
     )
     landscape_dir = (
-        f"{workdir}/landscape.{E}" if args.landscape_dir is None else args.landscape_dir
+        os.path.join(workdir, f"landscape.{E}")
+        if args.landscape_dir is None
+        else args.landscape_dir
     )
-    outdir = f"{landscape_dir}/landscape_full" if args.outdir is None else args.outdir
+    if args.outdir is None:
+        outdir = os.path.join(landscape_dir, "landscape_full")
+    else:
+        outdir = args.outdir
 
-    mask_mrc = f"{landscape_dir}/mask.mrc"
-    pca_obj_pkl = f"{landscape_dir}/vol_pca_obj.pkl"
+    mask_mrc = os.path.join(landscape_dir, "mask.mrc")
+    pca_obj_pkl = os.path.join(landscape_dir, "vol_pca_obj.pkl")
     assert os.path.exists(
         mask_mrc
     ), f"{mask_mrc} missing. Did you run cryodrgn analyze_landscape?"
@@ -411,8 +424,8 @@ def main(args: argparse.Namespace) -> None:
     if not os.path.exists(outdir):
         os.mkdir(outdir)
 
-    embeddings_pkl = f"{outdir}/vol_pca_sampled.pkl"
-    z_sampled_pkl = f"{outdir}/z.sampled.pkl"
+    embeddings_pkl = os.path.join(outdir, "vol_pca_sampled.pkl")
+    z_sampled_pkl = os.path.join(outdir, "z.sampled.pkl")
     if args.skip_vol:
         assert os.path.exists(
             embeddings_pkl
@@ -430,13 +443,13 @@ def main(args: argparse.Namespace) -> None:
 
     # Train model
     embeddings_all = train_model(z, embeddings, outdir, zfile, args)
-    utils.save_pkl(embeddings_all, f"{outdir}/vol_pca_all.pkl")
+    utils.save_pkl(embeddings_all, os.path.join(outdir, "vol_pca_all.pkl"))
 
     # Run UMAP
     logger.info("Running UMAP...")
     reducer = umap.UMAP(n_neighbors=args.num_neighbors)
     umap_emb = reducer.fit_transform(embeddings_all)
-    utils.save_pkl(umap_emb, f"{outdir}/umap_vol_pca.pkl")
+    utils.save_pkl(umap_emb, os.path.join(outdir, "umap_vol_pca.pkl"))
 
     logger.info("Running clustering...")
     g = utils.get_igraph_from_adjacency(reducer.graph_)
@@ -448,7 +461,7 @@ def main(args: argparse.Namespace) -> None:
         objective_function="modularity",
     )
 
-    clustering_dir = f"{outdir}/full_clustering"
+    clustering_dir = os.path.join(outdir, "full_clustering")
     # Save clustering results
     logger.info(f"Saving results to {clustering_dir}")
     if not os.path.exists(f"{clustering_dir}"):
@@ -467,7 +480,7 @@ def main(args: argparse.Namespace) -> None:
         g.ax_joint.set_xlabel("UMAP1")
         g.ax_joint.set_ylabel("UMAP2")
         plt.tight_layout()
-        plt.savefig(f"{outdir}/umap_vol_pca_hexbin.png")
+        plt.savefig(os.path.join(outdir, "umap_vol_pca_hexbin.png"))
         plt.close()
     except ZeroDivisionError:
         logger.warning("Data too small to generate UMAP hexbins!")
@@ -539,6 +552,10 @@ def main(args: argparse.Namespace) -> None:
         cell["source"] = cell["source"].replace("M = None", f"M = {M}")
         cell["source"] = cell["source"].replace(
             "linkage = None", f'linkage = "{link_method}"'
+        )
+        cell["source"] = cell["source"].replace(
+            "landscape_dir = f'{WORKDIR}/landscape.{EPOCH}'",
+            f"landscape_dir = '{landscape_dir}'",
         )
 
     with open(out_ipynb, "w") as f:
