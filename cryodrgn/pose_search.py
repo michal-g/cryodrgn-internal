@@ -132,6 +132,7 @@ class PoseSearch:
             ctf_i = ctf_i.view(B, 1, 1, -1)[..., mask]  # Bx1x1xYX
 
         def compute_err(images, rot):
+            # logger.info(f"Evaluating model on {x.shape} = {x.nelement() // 3} points")
             adj_angles_inplane = None
             if angles_inplane is not None:
                 # apply a random in-plane rotation from the set
@@ -146,18 +147,22 @@ class PoseSearch:
                 _model = unparallelize(self.model)
                 assert isinstance(_model, HetOnlyVAE)
                 x = _model.cat_z(x, z)
+
+            # Evaluate model on chunks of the input to avoid heavy memory load
             x = x.to(device)
-            # logger.info(f"Evaluating model on {x.shape} = {x.nelement() // 3} points")
             with torch.no_grad():
-                y_hat = self.model(x)
-                y_hat = y_hat.float()
-            y_hat = y_hat.view(
-                -1, 1, NQ, YX
-            )  # 1x1xNQxYX for base grid, Bx1x8xYX for incremental grid
-            if ctf_i is not None:
-                y_hat = y_hat * ctf_i
-            if adj_angles_inplane is not None:
-                y_hat = self.rotate_images(y_hat, adj_angles_inplane, L)
+                y_hat = [
+                    self.model(x_chunk).view(x_chunk.shape[0], 1, -1, YX)
+                    for x_chunk in x.chunk(self.nkeptposes)
+                ]
+
+                # 1x1xNQxYX for base grid, Bx1x8xYX for incremental grid
+                y_hat = torch.cat(y_hat, dim=0).view(-1, 1, NQ, YX).float()
+                if ctf_i is not None:
+                    y_hat = y_hat * ctf_i
+                if adj_angles_inplane is not None:
+                    y_hat = self.rotate_images(y_hat, adj_angles_inplane, L)
+
             images = images.unsqueeze(2)  # BxTx1xYX
             if self.loss_fn == "mse":
                 err = (images - y_hat).pow(2).sum(-1)  # BxTxQ
