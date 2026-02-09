@@ -61,11 +61,9 @@ class Tomogram:
         self.defocus_u_array = defocus_u_array
         self.defocus_v_array = defocus_v_array
         self.defocus_angle_array = defocus_angle_array
-        self.x_tilts = x_tilts
-        self.y_tilts = y_tilts
+        self.x_tilts, self.y_tilts = x_tilts, y_tilts
         self.z_rots = z_rots
-        self.x_shifts = x_shifts
-        self.y_shifts = y_shifts
+        self.x_shifts, self.y_shifts = x_shifts, y_shifts
         self.hand = hand
 
         self.n_tilts = len(self.x_tilts)
@@ -75,13 +73,16 @@ class Tomogram:
     def _translation_matrix(self, shift_3d):
         mat = np.eye(4)
         mat[:3, 3] = shift_3d
+
         return mat
 
-    def _rotation_matrix(self, axis, angle_deg):
+    def _rotation_matrix(self, axis: list[float], angle_deg: float) -> np.ndarray:
         """Build a 4x4 rotation about 'axis' by 'angle_deg' degrees."""
+
         rot = R.from_rotvec(np.deg2rad(angle_deg) * np.array(axis))
         mat = np.eye(4)
         mat[:3, :3] = rot.as_matrix()
+
         return mat
 
     def _build_projection_matrices(self):
@@ -94,13 +95,14 @@ class Tomogram:
             r1 = self._rotation_matrix([0, 1, 0], self.y_tilts[i])
             r2 = self._rotation_matrix([0, 0, 1], self.z_rots[i])
 
-            shift_in_pix = np.array([
-                self.x_shifts[i] / self.pixel_size,
-                self.y_shifts[i] / self.pixel_size,
-                0.0
-            ])
+            shift_in_pix = np.array(
+                [
+                    self.x_shifts[i] / self.pixel_size,
+                    self.y_shifts[i] / self.pixel_size,
+                    0.0,
+                ]
+            )
             s1 = self._translation_matrix(shift_in_pix)
-
 
             tilt_img_center = np.array(
                 [self.tilt_image_dims[0] / 2.0, self.tilt_image_dims[1] / 2.0, 0.0]
@@ -127,13 +129,17 @@ class Tomogram:
             self.projection_matrices[i] = M
 
     def project_point(self, point_3d, i_tilt):
-        """
-        Apply the 4x4 transformation for tilt i_tilt to project a 3D coordinate
-        (in tomogram voxels) to 2D tilt coords.
+        """Project a 3D coordinate in tomogram voxels to 2D tilt coordinates.
+
+        Args:
+            point_3d: 3D coordinate in tomogram voxels
+            i_tilt: index of 4x4 projection matrix to use to transform the 3D point
+
         """
         pt_pix = point_3d / self.pixel_size
         pt_homog = np.append(pt_pix, 1.0)
         M = self.projection_matrices[i_tilt]
+
         return (M @ pt_homog)[:2]
 
     def calculate_local_defocus_uv(self, i_tilt, point_3d):
@@ -328,9 +334,15 @@ def main(args: argparse.Namespace) -> None:
         y_ang = row["rlnCenteredCoordinateYAngst"]
         z_ang = row["rlnCenteredCoordinateZAngst"]
 
-        ox = row["rlnOriginXAngst"] if "rlnOriginXAngst" in particles_df.columns else 0.0
-        oy = row["rlnOriginYAngst"] if "rlnOriginYAngst" in particles_df.columns else 0.0
-        oz = row["rlnOriginZAngst"] if "rlnOriginZAngst" in particles_df.columns else 0.0
+        ox = (
+            row["rlnOriginXAngst"] if "rlnOriginXAngst" in particles_df.columns else 0.0
+        )
+        oy = (
+            row["rlnOriginYAngst"] if "rlnOriginYAngst" in particles_df.columns else 0.0
+        )
+        oz = (
+            row["rlnOriginZAngst"] if "rlnOriginZAngst" in particles_df.columns else 0.0
+        )
 
         point_3d_ang = np.array([x_ang - ox, y_ang - oy, z_ang - oz], dtype=float)
         point_3d_rotated = point_3d_ang
@@ -355,7 +367,7 @@ def main(args: argparse.Namespace) -> None:
         df_2d["rlnOriginY"] = 0
 
         if "rlnRandomSubset" in row:
-             df_2d["rlnRandomSubset"] = row["rlnRandomSubset"]
+            df_2d["rlnRandomSubset"] = row["rlnRandomSubset"]
 
         all_2d_rows.append(df_2d)
 

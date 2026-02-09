@@ -85,7 +85,8 @@ class PoseTracker(nn.Module):
             poses = (utils.load_pkl(infile[0]), utils.load_pkl(infile[1]))
         else:  # rotation pickle or poses pickle
             poses = utils.load_pkl(infile[0])
-            if type(poses) != tuple:
+
+            if not isinstance(poses, tuple):
                 poses = (poses,)
 
         # rotations
