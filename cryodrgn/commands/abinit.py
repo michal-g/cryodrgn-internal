@@ -20,7 +20,7 @@ from cryodrgn import utils, dataset, ctf
 from cryodrgn.losses import kl_divergence_conf, l1_regularizer, l2_frequency_bias
 from cryodrgn.models_ai import DrgnAI, MyDataParallel
 from cryodrgn.masking import CircularMask, FrequencyMarchingMask
-from cryodrgn.commands_drgnai.analyze import ModelAnalyzer
+from cryodrgn.analysis_drgnai import ModelAnalyzer
 
 
 def add_args(parser: argparse.ArgumentParser) -> None:

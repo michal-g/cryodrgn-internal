@@ -622,30 +622,3 @@ class ModelAnalyzer:
             plt.tight_layout()
             plt.savefig(os.path.join(pc_path, "pca_traversal_hex.png"))
             plt.close()
-
-
-def main(args: argparse.Namespace) -> None:
-    cfg = dict(
-        epoch=args.epoch,
-        device=args.device,
-        outdir=args.outdir,
-        skip_vol=args.skip_vol,
-        skip_umap=args.skip_umap,
-        pc=args.pc,
-        n_per_pc=args.n_per_pc,
-        ksample=args.ksample,
-        apix=args.Apix,
-        flip=args.flip,
-        invert=args.invert,
-        downsample=args.downsample,
-    )
-
-    cfg_file = os.path.join(args.workdir, "config.yaml")
-    if not os.path.exists(cfg_file):
-        raise ValueError(
-            f"Config file {cfg_file} does not exist! "
-            f"Has the model for {args.workdir} been trained yet?"
-        )
-
-    analyzer = ModelAnalyzer(args.workdir, cfg, utils.load_yaml(cfg_file))
-    analyzer.analyze()
