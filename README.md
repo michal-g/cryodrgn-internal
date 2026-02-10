@@ -19,25 +19,11 @@ cryoDRGN installation, training and analysis. A brief quick start is provided be
 For any feedback, questions, or bugs, please file a Github issue or start a Github discussion.
 
 
-### Updates in Version 3.5.x
-* 1-indexing of output volumes and epochs replacing the previous 0-indexing
-* [NEW] volume reconstruction using an autodecoder with `cryodrgn train_dec` *(beta)*
-* [NEW] `cryodrgn parse_relion` for parsing RELION5 3D tomo files to the cryoDRGN 2D input format
-* improved landscape analysis using Leiden clustering
-* official support for Python 3.12, deprecating support for Python 3.9
-* [NEW] consolidated `cryodrgn parse_star` command (merging `parse_pose_star` and `parse_ctf_star`)
-* `analyze` is now run automatically on the final epoch once model training is complete
-* faster backprojection and downsampling; `--multigpu` for faster landscape analysis
-
-
-### Updates in Version 3.x
-
-The official release of [cryoDRGN-ET](https://www.biorxiv.org/content/10.1101/2023.08.18.553799v1) for heterogeneous subtomogram analysis.
-
-* [NEW] Heterogeneous reconstruction of subtomograms. See documentation [on gitbook](https://ez-lab.gitbook.io/cryodrgn/)
-* Updated `cryodrgn backproject_voxel` for voxel-based homogeneous reconstruction
-* Major refactor of dataset loading for handling large datasets
-
+### Updates in Version 4.2.x
+* [NEW] cryoDRGN-AI ab-initio reconstruction method integrated into cryoDRGN as `cryodrgn abinit`
+	* former ab-initio reconstruction methods are deprecated as `cryodrgn abinit_het_old` and `cryodrgn abinit_homo_old`
+	* `cryodrgn analyze` now supports cryoDRGN-AI models as well as the previous cryoDRGN models
+* more memory-efficient ab-initio reconstruction
 
 A full list of cryoDRGN version updates can be found at our
 [release notes](https://github.com/ml-struct-bio/cryodrgn/releases).

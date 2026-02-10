@@ -8,7 +8,7 @@ import pickle
 import numpy as np
 import nbformat
 from nbconvert.preprocessors import ExecutePreprocessor
-from cryodrgn.commands import analyze, eval_vol, filter, graph_traversal, abinit_het
+from cryodrgn.commands import analyze, eval_vol, filter, graph_traversal, abinit_het_old
 
 
 @pytest.mark.parametrize(
@@ -78,8 +78,8 @@ class TestAbinitHetero:
             args += ["--ind", indices.path]
 
         parser = argparse.ArgumentParser()
-        abinit_het.add_args(parser)
-        abinit_het.main(parser.parse_args(args))
+        abinit_het_old.add_args(parser)
+        abinit_het_old.main(parser.parse_args(args))
         assert not os.path.exists(os.path.join(outdir, "analyze.2"))
 
     @pytest.mark.parametrize(

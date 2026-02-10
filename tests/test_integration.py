@@ -86,7 +86,9 @@ class TestIterativeFiltering:
             os.path.join(outdir, "weights.9.pkl")
         ), "Upstream tests have failed!"
 
-        args = analyze.add_args(argparse.ArgumentParser()).parse_args(
+        parser = argparse.ArgumentParser()
+        analyze.add_args(parser)
+        args = parser.parse_args(
             [
                 outdir,
                 "9",  # Epoch number to analyze - 0-indexed
