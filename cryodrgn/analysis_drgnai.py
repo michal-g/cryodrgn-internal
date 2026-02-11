@@ -255,7 +255,7 @@ class ModelAnalyzer:
             self.n_samples = None
 
         # Create an output directory for these analyses
-        self.outdir = os.path.join(self.traindir, f"analysis_{self.epoch}")
+        self.outdir = os.path.join(self.traindir, f"analyze.{self.epoch}")
         os.makedirs(self.outdir, exist_ok=True)
 
     @staticmethod

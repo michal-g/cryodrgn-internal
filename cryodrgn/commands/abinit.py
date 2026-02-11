@@ -117,13 +117,13 @@ def add_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--batch-size-known-poses",
         type=int,
-        default=16,
+        default=32,
         help="Training batch size used for pose refinement (default: %(default)s)",
     )
     parser.add_argument(
         "--batch-size-sgd",
         type=int,
-        default=32,
+        default=256,
         help="Training batch size used for stochastic gradient descent (default: %(default)s)",
     )
 

@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
+from itertools import repeat
 
 from cryodrgn import shift_grid
 from cryodrgn import lie_tools
@@ -195,8 +196,20 @@ def compute_err(
         else:
             # x: [b, nq, npts, 3], [b * nq, npts, 3]
             # z: [b, z_dim], [b * nq, z_dim]
-            y_hat = model.eval_on_slice(x, z=z)
-            y_hat = y_hat.float()  # [b, nq, npts], [b * nq, npts]
+            if x.shape[0] > 16:
+                z_chunked = z.chunk(16) if z is not None else repeat(None)
+                y_hat = torch.cat(
+                    [
+                        model.eval_on_slice(x_chunk, z=z_chunk)
+                        for x_chunk, z_chunk in zip(x.chunk(16), z_chunked)
+                    ],
+                    dim=0,
+                ).float()  # [b, nq, npts], [b * nq, npts]
+            else:
+                y_hat = model.eval_on_slice(
+                    x, z=z
+                ).float()  # [b, nq, npts], [b * nq, npts]
+
     y_hat = y_hat.reshape(
         -1, 1, nq * n_in_planes, n_tilts, yx
     )  # [1/b, 1, nq * ip, n_tilts, yx] for base grid, [b, 1, 8, n_tilts, yx] for incremental grid
