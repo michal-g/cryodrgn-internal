@@ -6,10 +6,12 @@ import pickle
 import yaml
 import logging
 from datetime import datetime as dt
-import numpy as np
 import time
-from typing_extensions import Any
 from types import SimpleNamespace
+from typing_extensions import Any
+import contextlib
+
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
@@ -21,6 +23,11 @@ from cryodrgn.losses import kl_divergence_conf, l1_regularizer, l2_frequency_bia
 from cryodrgn.models_ai import DrgnAI, MyDataParallel
 from cryodrgn.masking import CircularMask, FrequencyMarchingMask
 from cryodrgn.analysis_drgnai import ModelAnalyzer
+
+try:
+    import apex.amp as amp  # type: ignore
+except ImportError:
+    pass
 
 
 def add_args(parser: argparse.ArgumentParser) -> None:
@@ -810,7 +817,7 @@ class ModelTrainer:
         # Initialization from a checkpoint saved to file from a previous training run
         if self.configs.load:
             self.logger.info(f"Loading checkpoint from {self.configs.load}")
-            checkpoint = torch.load(self.configs.load)
+            checkpoint = torch.load(self.configs.load, weights_only=False)
             state_dict = checkpoint["model_state_dict"]
 
             if "base_shifts" in state_dict:
@@ -899,7 +906,7 @@ class ModelTrainer:
 
         # Complete initialization from a previous checkpoint
         if self.configs.load:
-            checkpoint = torch.load(self.configs.load)
+            checkpoint = torch.load(self.configs.load, weights_only=False)
 
             for key in self.optimizers:
                 self.optimizers[key].load_state_dict(
@@ -1033,8 +1040,16 @@ class ModelTrainer:
                     f"{self.configs.hypervolume_dim=} is not a multiple of 8!"
                 )
 
-            self.logger.info("Using Automatic Mixed Precision training via torch.amp")
-            self.scaler = torch.amp.GradScaler()
+            try:
+                self.logger.info(
+                    "Using Automatic Mixed Precision training via apex.amp"
+                )
+                self.scaler = amp.initialize(self.scaler, opt_level="O1")
+            except:  # noqa: E722
+                self.logger.info(
+                    "Using Automatic Mixed Precision training via torch.amp"
+                )
+                self.scaler = torch.cuda.amp.GradScaler()
 
     def train(self):
         self.logger.info("--- Training Starts Now ---")
@@ -1253,26 +1268,11 @@ class ModelTrainer:
 
         # Forward pass
         if self.scaler is not None:
-            with torch.amp.autocast("cuda"):
-                latent_variables_dict, y_pred, y_gt_processed = self.forward_pass(
-                    in_dict
-                )
-
-                if self.n_prcs > 1:
-                    self.model.module.is_in_pose_search_step = False
-                else:
-                    self.model.is_in_pose_search_step = False
-                # Loss
-                if self.configs.verbose_time:
-                    torch.cuda.synchronize()
-                start_time_loss = time.time()
-                total_loss, all_losses = self.loss(
-                    y_pred, y_gt_processed, latent_variables_dict
-                )
-                if self.configs.verbose_time:
-                    torch.cuda.synchronize()
-                    self.run_times["loss"].append(time.time() - start_time_loss)
+            amp_mode = torch.cuda.amp.autocast()
         else:
+            amp_mode = contextlib.nullcontext()
+
+        with amp_mode:
             latent_variables_dict, y_pred, y_gt_processed = self.forward_pass(in_dict)
 
             if self.n_prcs > 1:
@@ -1283,12 +1283,10 @@ class ModelTrainer:
             # Loss
             if self.configs.verbose_time:
                 torch.cuda.synchronize()
-
             start_time_loss = time.time()
             total_loss, all_losses = self.loss(
                 y_pred, y_gt_processed, latent_variables_dict
             )
-
             if self.configs.verbose_time:
                 torch.cuda.synchronize()
                 self.run_times["loss"].append(time.time() - start_time_loss)

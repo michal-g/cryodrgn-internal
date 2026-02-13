@@ -94,7 +94,7 @@ class TestAbinitHetero:
             )
         )
 
-        kmeans_dir = os.path.join(outdir, f"analysis_{epoch}", "kmeans10")
+        kmeans_dir = os.path.join(outdir, f"analyze.{epoch}", "kmeans10")
         for i in range(vol_start_index, 10 + vol_start_index):
             assert os.path.exists(os.path.join(kmeans_dir, f"vol_{i:03d}.mrc"))
         assert not os.path.exists(
