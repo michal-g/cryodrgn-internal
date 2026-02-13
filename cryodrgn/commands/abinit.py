@@ -39,7 +39,9 @@ def add_args(parser: argparse.ArgumentParser) -> None:
 
     # Basic training controls
     parser.add_argument(
-        "--load", type=str, help="Load a previous checkpoint weights.pkl"
+        "--load",
+        type=str,
+        help="Path to a checkpoint (weights.<epoch>.pkl) to load.",
     )
     parser.add_argument(
         "--seed",
@@ -52,15 +54,45 @@ def add_args(parser: argparse.ArgumentParser) -> None:
     )
 
     # Dataset loading
-    parser.add_argument("--ctf", type=os.path.abspath, help="CTF parameters (.pkl)")
     parser.add_argument(
-        "--datadir", type=os.path.abspath, help="Path prefix for star/cs images"
+        "--ctf",
+        type=os.path.abspath,
+        help="Path to CTF parameters (.pkl). Must be the size of the full dataset.",
     )
-    parser.add_argument("--ind", type=os.path.abspath, help="Subset indices pkl to use")
-    parser.add_argument("--relion31", action="store_true")
-    parser.add_argument("--uninvert-data", dest="invert_data", action="store_false")
-    parser.add_argument("--lazy", action="store_true")
-    parser.add_argument("--max-threads", type=int, default=16)
+    parser.add_argument(
+        "--datadir",
+        type=os.path.abspath,
+        help="When using a .star or .cs file with relative paths, "
+        "path to the directory containing the .mrcs files.",
+    )
+    parser.add_argument(
+        "--ind",
+        type=os.path.abspath,
+        help="Path to indices (.pkl) or number of images to keep (first images kept). "
+        "Use full dataset if None.",
+    )
+    parser.add_argument(
+        "--relion31",
+        action="store_true",
+        help="Flag for relion 3.1 data format.",
+    )
+    parser.add_argument(
+        "--uninvert-data",
+        dest="invert_data",
+        action="store_false",
+        help="Flag for not inverting input data (e.g. for EMPIAR-10076).",
+    )
+    parser.add_argument(
+        "--lazy",
+        action="store_true",
+        help="Flag for lazy data loading.",
+    )
+    parser.add_argument(
+        "--max-threads",
+        type=int,
+        default=16,
+        help="Number of threads (default: %(default)s).",
+    )
 
     # Logging
     parser.add_argument(
@@ -82,7 +114,12 @@ def add_args(parser: argparse.ArgumentParser) -> None:
     )
 
     # Data loading and parallelism
-    parser.add_argument("--no-shuffle", dest="shuffle", action="store_false")
+    parser.add_argument(
+        "--no-shuffle",
+        dest="shuffle",
+        action="store_false",
+        help="Disable shuffling of the dataset for training batches.",
+    )
     parser.add_argument(
         "--num-workers",
         type=int,
@@ -93,18 +130,19 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         "--shuffler-size",
         type=int,
         default=32768,
-        help="If non-zero, will use a data shuffler for faster lazy data loading.",
+        help="Size of the shuffler when using accelerated data loading "
+        "(default: %(default)s).",
     )
     parser.add_argument(
         "--multigpu",
         action="store_true",
-        help="Parallelize training across all detected GPUs",
+        help="Activate multi-GPU mode if more than one GPU is available.",
     )
     parser.add_argument(
         "--no-amp",
         action="store_false",
         dest="amp",
-        help="Disable torch.amp mixed precision",
+        help="Disable automatic mixed precision (torch.amp).",
     )
 
     # Batch sizes
@@ -112,7 +150,8 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         "--batch-size-hps",
         type=int,
         default=8,
-        help="Training batch size used for hierarchical pose search (default: %(default)s)",
+        help="Training batch size used for hierarchical pose search "
+        "(default: %(default)s)",
     )
     parser.add_argument(
         "--batch-size-known-poses",
@@ -124,7 +163,8 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         "--batch-size-sgd",
         type=int,
         default=256,
-        help="Training batch size used for stochastic gradient descent (default: %(default)s)",
+        help="Training batch size used for stochastic gradient descent "
+        "(default: %(default)s)",
     )
 
     # Optimizers
@@ -159,77 +199,302 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         help="Weight decay for the optimizer (default: %(default)s)",
     )
     parser.add_argument(
-        "--hypervolume-optimizer-type", choices=("adam",), default="adam"
+        "--hypervolume-optimizer-type",
+        choices=("adam",),
+        default="adam",
+        help="Optimizer type for the hypervolume (default: %(default)s).",
     )
     parser.add_argument(
-        "--pose-table-optimizer-type", choices=("adam", "lbfgs"), default="adam"
+        "--pose-table-optimizer-type",
+        choices=("adam", "lbfgs"),
+        default="adam",
+        help="Optimizer for the pose table (default: %(default)s).",
     )
     parser.add_argument(
-        "--conf-table-optimizer-type", choices=("adam", "lbfgs"), default="adam"
+        "--conf-table-optimizer-type",
+        choices=("adam", "lbfgs"),
+        default="adam",
+        help="Optimizer for the conformation table (default: %(default)s).",
     )
     parser.add_argument(
-        "--conf-encoder-optimizer-type", choices=("adam",), default="adam"
+        "--conf-encoder-optimizer-type",
+        choices=("adam",),
+        default="adam",
+        help="Optimizer for the conformation encoder (default: %(default)s).",
     )
 
     # Scheduling
-    parser.add_argument("--num-epochs", "-n", type=int, default=30)
-    parser.add_argument("--epochs-pose-search", type=int, default=None)
-    parser.add_argument("--n-imgs-pose-search", type=int, default=None)
-    parser.add_argument("--epochs-sgd", type=int, default=None)
-    parser.add_argument("--pose-only-phase", type=int, default=0)
+    parser.add_argument(
+        "--num-epochs",
+        "-n",
+        type=int,
+        default=30,
+        help="Number of total epochs to train for (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--epochs-pose-search",
+        type=int,
+        default=None,
+        help="Number of epochs to train for pose search (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--n-imgs-pose-search",
+        type=int,
+        default=None,
+        help="Number of images to train for pose search (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--epochs-sgd",
+        type=int,
+        default=None,
+        help="Number of epochs to train for SGD (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--pose-only-phase",
+        type=int,
+        default=0,
+        help="Number of epochs to train for pose only phase (default: %(default)s)",
+    )
 
     # Masking
     parser.add_argument(
-        "--output-mask", choices=("circ", "frequency_marching"), default="circ"
+        "--output-mask",
+        choices=("circ", "frequency_marching"),
+        default="circ",
+        help="Type of output mask to use (default: %(default)s)",
     )
-    parser.add_argument("--add-one-frequency-every", type=int, default=100000)
-    parser.add_argument("--n-frequencies-per-epoch", type=int, default=10)
-    parser.add_argument("--max-freq", type=int)
-    parser.add_argument("--window-radius-gt-real", type=float, default=0.85)
+    parser.add_argument(
+        "--add-one-frequency-every",
+        type=int,
+        default=100000,
+        help="Frequency (in images) for adding new frequencies in the output mask "
+        "during HPS (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--n-frequencies-per-epoch",
+        type=int,
+        default=10,
+        help="Number of frequencies to add in the output mask at each epoch "
+        "during SGD (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--max-freq",
+        type=int,
+        help="Highest frequency to use in the loss. Use all frequencies if not set.",
+    )
+    parser.add_argument(
+        "--window-radius-gt-real",
+        type=float,
+        default=0.85,
+        help="Radius of the circular mask applied on images in real space; "
+        "maximum radius is 1 (default: %(default)s).",
+    )
 
     # Losses
-    parser.add_argument("--beta-conf", type=float, default=0.0)
-    parser.add_argument("--trans-l1-regularizer", type=float, default=0.0)
-    parser.add_argument("--l2-smoothness-regularizer", type=float, default=0.0)
+    parser.add_argument(
+        "--beta-conf",
+        type=float,
+        default=0.0,
+        help="Beta term penalizing KL divergence of conformation posterior; "
+        "only used in variational mode (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--trans-l1-regularizer",
+        type=float,
+        default=0.0,
+        help="Strength of the L1 regularizer applied on estimated "
+        "translations (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--l2-smoothness-regularizer",
+        type=float,
+        default=0.0,
+        help="Strength of the L2 smoothness regularization "
+        "(penalization of strong gradients) (default: %(default)s).",
+    )
 
     # Z / heterogeneity
-    parser.add_argument("--variational-het", action="store_true")
-    parser.add_argument("--zdim", type=int, default=4)
-    parser.add_argument("--std-z-init", type=float, default=0.1)
-    parser.add_argument("--use-conf-encoder", action="store_true")
-    parser.add_argument("--depth-cnn", type=int, default=5)
-    parser.add_argument("--channels-cnn", type=int, default=32)
-    parser.add_argument("--kernel-size-cnn", type=int, default=3)
-    parser.add_argument("--resolution-encoder", type=int)
+    parser.add_argument(
+        "--variational-het",
+        action="store_true",
+        help="Activate variational mode of conformation estimation.",
+    )
+    parser.add_argument(
+        "--zdim",
+        type=int,
+        default=4,
+        help="Dimension of conformations (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--std-z-init",
+        type=float,
+        default=0.1,
+        help="Standard deviation of initial conformations "
+        "(i.i.d. centered Gaussian) (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--use-conf-encoder",
+        action="store_true",
+        help="Use an encoder to predict conformations.",
+    )
+    parser.add_argument(
+        "--depth-cnn",
+        type=int,
+        default=5,
+        help="Depth of the encoder (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--channels-cnn",
+        type=int,
+        default=32,
+        help="Number of channels in the encoder (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--kernel-size-cnn",
+        type=int,
+        default=3,
+        help="Size of the kernels in the encoder (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--resolution-encoder",
+        type=int,
+        help="Resolution of images given to the encoder. "
+        "Images are not downsampled if not set.",
+    )
 
     # Hypervolume
-    parser.add_argument("--explicit-volume", action="store_true")
-    parser.add_argument("--hypervolume-layers", type=int, default=3)
-    parser.add_argument("--hypervolume-dim", type=int, default=256)
-    parser.add_argument("--pe-type", choices=("gaussian",), default="gaussian")
-    parser.add_argument("--pe-dim", type=int, default=64)
-    parser.add_argument("--feat-sigma", type=float, default=0.5)
-    parser.add_argument("--hypervolume-domain", choices=("hartley",), default="hartley")
-    parser.add_argument("--pe-type-conf", choices=(None, "geom"), default=None)
     parser.add_argument(
-        "--initial-conf", type=os.path.abspath, help="Initial conformations (.pkl)"
+        "--explicit-volume",
+        action="store_true",
+        help="Use an explicit volume (voxel array).",
+    )
+    parser.add_argument(
+        "--hypervolume-layers",
+        type=int,
+        default=3,
+        help="Number of hidden layers in the hypervolume (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--hypervolume-dim",
+        type=int,
+        default=256,
+        help="Dimension of hidden layers in the hypervolume (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--pe-type",
+        choices=("gaussian",),
+        default="gaussian",
+        help="Type of positional encoding for Fourier coordinates "
+        "(default: %(default)s).",
+    )
+    parser.add_argument(
+        "--pe-dim",
+        type=int,
+        default=64,
+        help="Number of frequencies used for "
+        "positional encoding (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--feat-sigma",
+        type=float,
+        default=0.5,
+        help="Standard deviation of encoding frequencies (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--hypervolume-domain",
+        choices=("hartley",),
+        default="hartley",
+        help="Domain of the hypervolume (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--pe-type-conf",
+        choices=(None, "geom"),
+        default=None,
+        help="Type of positional encoding for conformations (default: None).",
+    )
+    parser.add_argument(
+        "--initial-conf",
+        type=os.path.abspath,
+        help="Path to initial conformations (.pkl). "
+        "Conformations are randomly initialized if not set.",
     )
 
     # Pretrain
-    parser.add_argument("--n-imgs-pretrain", type=int, default=10000)
+    parser.add_argument(
+        "--n-imgs-pretrain",
+        type=int,
+        default=10000,
+        help="Number of images to use for pre-training (default: %(default)s).",
+    )
 
     # Pose search
-    parser.add_argument("--l-start", type=int, default=12)
-    parser.add_argument("--l-end", type=int, default=32)
-    parser.add_argument("--n-iter", type=int, default=4)
-    parser.add_argument("--t-extent", type=float, default=20.0)
-    parser.add_argument("--t-n-grid", type=int, default=7)
-    parser.add_argument("--t-x-shift", type=float, default=0.0)
-    parser.add_argument("--t-y-shift", type=float, default=0.0)
-    parser.add_argument("--no-trans-search-at-pose-search", action="store_true")
-    parser.add_argument("--n-kept-poses", type=int, default=8)
-    parser.add_argument("--base-healpy", type=int, default=2)
-    parser.add_argument("--no-trans", action="store_true")
+    parser.add_argument(
+        "--l-start",
+        type=int,
+        default=12,
+        help="Number of frequencies to use during the first "
+        "pose search step (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--l-end",
+        type=int,
+        default=32,
+        help="Number of frequencies to use during the last pose search step "
+        "(default: %(default)s).",
+    )
+    parser.add_argument(
+        "--n-iter",
+        type=int,
+        default=4,
+        help="Number of pose search iterations (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--t-extent",
+        type=float,
+        default=20.0,
+        help="Extent of the translation search grid, in pixels (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--t-n-grid",
+        type=int,
+        default=7,
+        help="Number of points per dimension in the translation search grid "
+        "(default: %(default)s).",
+    )
+    parser.add_argument(
+        "--t-x-shift",
+        type=float,
+        default=0.0,
+        help="X-axis shift of the translation search grid (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--t-y-shift",
+        type=float,
+        default=0.0,
+        help="Y-axis shift of the translation search grid (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--no-trans-search-at-pose-search",
+        action="store_true",
+        help="Bypass the translation search during pose search.",
+    )
+    parser.add_argument(
+        "--n-kept-poses",
+        type=int,
+        default=8,
+        help="Number of poses kept per image (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--base-healpy",
+        type=int,
+        default=2,
+        help="Base healpy index (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--no-trans",
+        action="store_true",
+        help="Indicate that the dataset does not contain translations.",
+    )
 
     parser.add_argument(
         "--norm",
