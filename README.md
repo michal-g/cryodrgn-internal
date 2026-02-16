@@ -553,13 +553,16 @@ Documentation: https://ez-lab.gitbook.io/cryodrgn/cryodrgn-conformational-landsc
 
 ## *Ab Initio* Reconstruction
 
-An early version of *ab initio* reconstruction was developed as cryoDRGN2 and available with the `cryodrgn abinit_het` and `cryodrgn abinit_homo` executables.
-The arguments are similar to `cryodrgn train_vae`, but the `--poses` argument is not required.
+CryoDRGN-AI is currently available through the `cryodrgn abinit` command. Please see the
+[corresponding manuscript](https://cryodrgnai.cs.princeton.edu/) for details on our latest version
+of *ab initio* reconstruction.
 
+An earlier version of *ab initio* reconstruction was developed as cryoDRGN2 and is still available with the
+`cryodrgn abinit_het_old` and `cryodrgn abinit_homo_old` executables.
 CryoDRGN2 documentation: https://ez-lab.gitbook.io/cryodrgn/cryodrgn2-ab-initio-reconstruction
 
-Please see the [cryoDRGN-AI](https://cryodrgnai.cs.princeton.edu/) manuscript and software for our latest version of *ab initio* reconstruction.
-CryoDRGN-AI is currently available as a standalone [tool](https://github.com/ml-struct-bio/drgnai), however, we are working on integrating cryoDRGN-AI into `cryodrgn` software version 4.0+.
+The arguments for all ab-initio reconstruction commands are similar to `cryodrgn train_vae`, but the `--poses` argument
+is not required.
 
 ## CryoDRGN-ET for subtomogram analysis
 

@@ -53,7 +53,7 @@ class TestAbinitHetero:
             "--n-imgs-pretrain",
             "100",
             "--no-analysis",
-            "--log-heavy-interval",
+            "--checkpoint",
             "1",
         ]
         if ctf.path is not None:
@@ -64,7 +64,11 @@ class TestAbinitHetero:
         parser = argparse.ArgumentParser()
         abinit.add_args(parser)
         abinit.main(parser.parse_args(args))
+
+        assert os.path.exists(os.path.join(outdir, "weights.2.pkl"))
+        assert os.path.exists(os.path.join(outdir, "weights.3.pkl"))
         assert not os.path.exists(os.path.join(outdir, "analyze.2"))
+        assert not os.path.exists(os.path.join(outdir, "analyze.3"))
 
     @pytest.mark.parametrize(
         "epoch, vol_start_index",
@@ -100,3 +104,41 @@ class TestAbinitHetero:
         assert not os.path.exists(
             os.path.join(kmeans_dir, f"vol_{(10 + vol_start_index):03d}.mrc")
         )
+
+    def test_load_checkpoint(self, tmpdir_factory, particles, ctf, indices):
+        """Load a checkpoint and continue training."""
+
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        parser = argparse.ArgumentParser()
+        abinit.add_args(parser)
+        args = [
+            particles.path,
+            "-o",
+            outdir,
+            "--load",
+            os.path.join(outdir, "weights.3.pkl"),
+            "--hypervolume-dim",
+            "128",
+            "--hypervolume-layers",
+            "3",
+            "--pe-dim",
+            "8",
+            "--t-extent",
+            "4.0",
+            "--t-n-grid",
+            "2",
+            "--num-epochs",
+            "5",
+            "--checkpoint",
+            "3",
+        ]
+        if ctf.path is not None:
+            args += ["--ctf", ctf.path]
+        if indices.path is not None:
+            args += ["--ind", indices.path]
+
+        abinit.main(parser.parse_args(args))
+        assert not os.path.exists(os.path.join(outdir, "weights.4.pkl"))
+        assert os.path.exists(os.path.join(outdir, "weights.5.pkl"))
+        assert not os.path.exists(os.path.join(outdir, "analyze.4"))
+        assert os.path.exists(os.path.join(outdir, "analyze.5"))

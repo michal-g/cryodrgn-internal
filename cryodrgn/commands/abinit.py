@@ -111,10 +111,10 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         help="Logging interval in N_IMGS (default: %(default)s)",
     )
     group.add_argument(
-        "--log-heavy-interval",
+        "--checkpoint",
         type=int,
         default=5,
-        help="Logging interval in N_EPOCHS (default: %(default)s)",
+        help="Checkpointing interval in N_EPOCHS (default: %(default)s)",
     )
     group.add_argument(
         "--verbose-time",
@@ -1167,15 +1167,10 @@ class ModelTrainer:
 
                     self.optimized_modules.append("conf_table")
 
-            will_make_summary = (
-                (
-                    self.configs.log_heavy_interval
-                    and (epoch - 1) % self.configs.log_heavy_interval == 0
-                )
-                or self.is_in_pose_search_step
-                or self.pretraining
-                or epoch == self.num_epochs
-            )
+            will_make_summary = epoch % self.configs.log_heavy_interval == 0
+            will_make_summary |= self.is_in_pose_search_step
+            will_make_summary |= self.pretraining
+            will_make_summary |= epoch == self.num_epochs
             self.log_latents = will_make_summary
 
             if will_make_summary:
@@ -1658,7 +1653,7 @@ def main(args: argparse.Namespace) -> None:
         lazy=args.lazy,
         max_threads=args.max_threads,
         log_interval=args.log_interval,
-        log_heavy_interval=args.log_heavy_interval,
+        log_heavy_interval=args.checkpoint,
         verbose_time=args.verbose_time,
         shuffle=args.shuffle,
         num_workers=args.num_workers,
