@@ -1,7 +1,8 @@
 """Reconstructing volume(s) from picked cryoEM/ET particles using cryoDRGN-AI."""
 
-import argparse
 import os
+import sys
+import argparse
 import pickle
 import logging
 from datetime import datetime as dt
@@ -24,6 +25,11 @@ from cryodrgn.masking import CircularMask, FrequencyMarchingMask
 from cryodrgn.analysis_drgnai import ModelAnalyzer
 from cryodrgn.config import save as save_config
 
+import warnings
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+# If we can't import apex amp, we'll just use the default PyTorch AMP
 try:
     import apex.amp as amp  # type: ignore
 except ImportError:
@@ -31,6 +37,8 @@ except ImportError:
 
 
 def add_args(parser: argparse.ArgumentParser) -> None:
+    """The command-line arguments for use with the command `cryodrgn abinit`."""
+
     parser.add_argument(
         "particles",
         type=os.path.abspath,
@@ -60,7 +68,6 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         "-v", "--verbose", action="store_true", help="Increase verbosity"
     )
 
-    # Dataset loading
     parser.add_argument(
         "--ctf",
         type=os.path.abspath,
@@ -73,6 +80,7 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         "path to the directory containing the .mrcs files.",
     )
 
+    # Dataset loading
     group = parser.add_argument_group("Dataset loading")
     group.add_argument(
         "--ind",
@@ -122,7 +130,38 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         help="Print time taken for each training step",
     )
 
-    group = parser.add_argument_group("Data loading and parallelism")
+    group = parser.add_argument_group("Training parameters")
+    group.add_argument(
+        "--num-epochs",
+        "-n",
+        type=int,
+        default=30,
+        help="Number of total epochs to train for (default: %(default)s)",
+    )
+    group.add_argument(
+        "--epochs-pose-search",
+        type=int,
+        default=None,
+        help="Number of epochs to train for pose search (default: %(default)s)",
+    )
+    group.add_argument(
+        "--n-imgs-pose-search",
+        type=int,
+        default=None,
+        help="Number of images to train for pose search (default: %(default)s)",
+    )
+    group.add_argument(
+        "--epochs-sgd",
+        type=int,
+        default=None,
+        help="Number of epochs to train for SGD (default: %(default)s)",
+    )
+    group.add_argument(
+        "--pose-only-phase",
+        type=int,
+        default=0,
+        help="Number of epochs to train for pose only phase (default: %(default)s)",
+    )
     group.add_argument(
         "--no-shuffle",
         dest="shuffle",
@@ -153,8 +192,6 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         dest="amp",
         help="Disable automatic mixed precision (torch.amp).",
     )
-
-    group = parser.add_argument_group("Batch sizes")
     group.add_argument(
         "--batch-size-hps",
         type=int,
@@ -230,39 +267,6 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         choices=("adam",),
         default="adam",
         help="Optimizer for the conformation encoder (default: %(default)s).",
-    )
-
-    group = parser.add_argument_group("Scheduling")
-    group.add_argument(
-        "--num-epochs",
-        "-n",
-        type=int,
-        default=30,
-        help="Number of total epochs to train for (default: %(default)s)",
-    )
-    group.add_argument(
-        "--epochs-pose-search",
-        type=int,
-        default=None,
-        help="Number of epochs to train for pose search (default: %(default)s)",
-    )
-    group.add_argument(
-        "--n-imgs-pose-search",
-        type=int,
-        default=None,
-        help="Number of images to train for pose search (default: %(default)s)",
-    )
-    group.add_argument(
-        "--epochs-sgd",
-        type=int,
-        default=None,
-        help="Number of epochs to train for SGD (default: %(default)s)",
-    )
-    group.add_argument(
-        "--pose-only-phase",
-        type=int,
-        default=0,
-        help="Number of epochs to train for pose only phase (default: %(default)s)",
     )
 
     group = parser.add_argument_group("Masking")
@@ -588,6 +592,8 @@ class ModelTrainer:
         self.logger.addHandler(
             logging.FileHandler(os.path.join(self.outdir, "run.log"))
         )
+        self.logger.info(" ".join(sys.argv))
+        self.logger.info(self.configs)
 
         # Parallelize training across GPUs if --multigpu config option is selected
         gpu_count = torch.cuda.device_count()

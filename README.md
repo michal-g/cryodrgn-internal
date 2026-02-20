@@ -24,6 +24,7 @@ For any feedback, questions, or bugs, please file a Github issue or start a Gith
 	* former ab-initio reconstruction methods are deprecated as `cryodrgn abinit_het_old` and `cryodrgn abinit_homo_old`
 	* `cryodrgn analyze` now supports cryoDRGN-AI models as well as the previous cryoDRGN models
 * more memory-efficient ab-initio reconstruction
+* support for Python 3.13 and PyTorch 2.9; PyTorch <2.0 is no longer supported
 
 A full list of cryoDRGN version updates can be found at our
 [release notes](https://github.com/ml-struct-bio/cryodrgn/releases).
