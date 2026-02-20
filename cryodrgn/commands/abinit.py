@@ -52,11 +52,15 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         help="Output directory to save model",
     )
 
-    # Basic training controls
     parser.add_argument(
         "--load",
         type=str,
         help="Path to a checkpoint (weights.<epoch>.pkl) to load.",
+    )
+    parser.add_argument(
+        "--load-poses",
+        type=str,
+        help="Path to a pose file (pose.<epoch>.pkl) to load.",
     )
     parser.add_argument(
         "--seed",
@@ -1068,26 +1072,35 @@ class ModelTrainer:
                 )
 
             try:
-                self.logger.info(
-                    "Using Automatic Mixed Precision training via apex.amp"
-                )
                 self.scaler = amp.initialize(self.scaler, opt_level="O1")
             except:  # noqa: E722
+                self.scaler = torch.cuda.amp.GradScaler()
                 self.logger.info(
                     "Using Automatic Mixed Precision training via torch.amp"
                 )
-                self.scaler = torch.cuda.amp.GradScaler()
+            else:
+                self.logger.info(
+                    "Using Automatic Mixed Precision training via apex.amp"
+                )
 
     def train(self):
         self.logger.info("--- Training Starts Now ---")
         t_0 = dt.now()
 
-        self.predicted_rots = (
-            np.eye(3).reshape(1, 3, 3).repeat(self.n_tilts_dataset, axis=0)
-        )
-        self.predicted_trans = (
-            np.zeros((self.n_tilts_dataset, 2)) if not self.configs.no_trans else None
-        )
+        if self.configs.load_poses is not None:
+            self.logger.info(f"Loading poses from {self.configs.load_poses}")
+            self.predicted_rots, self.predicted_trans = utils.load_pkl(
+                self.configs.load_poses
+            )
+        else:
+            self.predicted_rots = (
+                np.eye(3).reshape(1, 3, 3).repeat(self.n_tilts_dataset, axis=0)
+            )
+            self.predicted_trans = (
+                np.zeros((self.n_tilts_dataset, 2))
+                if not self.configs.no_trans
+                else None
+            )
         self.predicted_conf = (
             np.zeros((self.n_particles_dataset, self.configs.zdim))
             if self.configs.zdim > 0
@@ -1656,6 +1669,7 @@ def main(args: argparse.Namespace) -> None:
         relion31=args.relion31,
         invert_data=args.invert_data,
         load=args.load,
+        load_poses=args.load_poses,
         lazy=args.lazy,
         max_threads=args.max_threads,
         log_interval=args.log_interval,
@@ -1724,16 +1738,21 @@ def main(args: argparse.Namespace) -> None:
         initial_conf=args.initial_conf,
     )
 
-    # Support --load latest (resolve from outdir or outdir/out)
     if cfg["load"] is not None:
         if cfg["load"].strip().lower() == "latest":
-            weights_pkl, _ = utils.get_latest_checkpoint(args.outdir)
+            weights_pkl, pose_pkl = utils.get_latest_checkpoint(args.outdir)
             cfg["load"] = weights_pkl
         elif not os.path.exists(cfg["load"]):
             raise ValueError(
                 f"Invalid load argument which must be a path to "
                 f"a .pkl file or `latest`: {cfg['load']}"
             )
+        if cfg["load_poses"] is not None:
+            if not os.path.exists(cfg["load_poses"]):
+                raise ValueError(
+                    f"Invalid load_poses argument which must be a path to "
+                    f"a .pkl file or `latest`: {cfg['load_poses']}"
+                )
 
     trainer = ModelTrainer(args.outdir, cfg)
     trainer.train()

@@ -109,12 +109,13 @@ class TestAbinitHetero:
         """Load a checkpoint and continue training."""
 
         outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        new_outdir = os.path.join(outdir, "checkpoint")
         parser = argparse.ArgumentParser()
         abinit.add_args(parser)
         args = [
             particles.path,
             "-o",
-            outdir,
+            new_outdir,
             "--load",
             os.path.join(outdir, "weights.3.pkl"),
             "--hypervolume-dim",
@@ -138,7 +139,48 @@ class TestAbinitHetero:
             args += ["--ind", indices.path]
 
         abinit.main(parser.parse_args(args))
-        assert not os.path.exists(os.path.join(outdir, "weights.4.pkl"))
-        assert os.path.exists(os.path.join(outdir, "weights.5.pkl"))
-        assert not os.path.exists(os.path.join(outdir, "analyze.4"))
-        assert os.path.exists(os.path.join(outdir, "analyze.5"))
+        assert not os.path.exists(os.path.join(new_outdir, "weights.4.pkl"))
+        assert os.path.exists(os.path.join(new_outdir, "weights.5.pkl"))
+        assert not os.path.exists(os.path.join(new_outdir, "analyze.4"))
+        assert os.path.exists(os.path.join(new_outdir, "analyze.5"))
+
+    def test_load_poses(self, tmpdir_factory, particles, ctf, indices):
+        """Load poses and continue training."""
+
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        new_outdir = os.path.join(outdir, "checkpoint-poses")
+        parser = argparse.ArgumentParser()
+        abinit.add_args(parser)
+        args = [
+            particles.path,
+            "-o",
+            new_outdir,
+            "--load-poses",
+            os.path.join(outdir, "pose.1.pkl"),
+            "--hypervolume-dim",
+            "128",
+            "--hypervolume-layers",
+            "3",
+            "--pe-dim",
+            "8",
+            "--t-extent",
+            "4.0",
+            "--t-n-grid",
+            "2",
+            "--num-epochs",
+            "4",
+            "--epochs-pose-search",
+            "2",
+            "--checkpoint",
+            "2",
+            "--no-analysis",
+        ]
+        if ctf.path is not None:
+            args += ["--ctf", ctf.path]
+        if indices.path is not None:
+            args += ["--ind", indices.path]
+
+        abinit.main(parser.parse_args(args))
+        assert not os.path.exists(os.path.join(new_outdir, "weights.3.pkl"))
+        assert os.path.exists(os.path.join(new_outdir, "weights.4.pkl"))
+        assert not os.path.exists(os.path.join(new_outdir, "analyze.4"))
