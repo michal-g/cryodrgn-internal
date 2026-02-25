@@ -117,7 +117,7 @@ class TestAbinitHetero:
             os.path.join(kmeans_dir, f"vol_{(10 + vol_start_index):03d}.mrc")
         )
 
-    @pytest.mark.parametrize("nb_lbl", ["cryoDRGN_figures"])
+    @pytest.mark.parametrize("nb_lbl", ["cryoDRGN_figures", "cryoDRGN_viz"])
     def test_notebooks(self, tmpdir_factory, particles, ctf, indices, nb_lbl):
         """Execute the demonstration Jupyter notebooks produced by analysis."""
 
