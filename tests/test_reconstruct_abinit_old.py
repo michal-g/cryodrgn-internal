@@ -30,6 +30,30 @@ from cryodrgn.commands import analyze, eval_vol, filter, graph_traversal, abinit
     ],
 )
 class TestAbinitHetero:
+
+    model_args = [
+        "--zdim",
+        "4",
+        "--lr",
+        ".0001",
+        "--enc-dim",
+        "8",
+        "--enc-layers",
+        "2",
+        "--dec-dim",
+        "8",
+        "--dec-layers",
+        "2",
+        "--pe-dim",
+        "8",
+        "--t-ngrid",
+        "2",
+        "--ps-freq",
+        "2",
+        "--nkeptposes",
+        "4",
+    ]
+
     def get_outdir(self, tmpdir_factory, particles, ctf, indices):
         dirname = os.path.join("AbinitHet", particles.label, ctf.label, indices.label)
         odir = os.path.join(tmpdir_factory.getbasetemp(), dirname)
@@ -45,31 +69,10 @@ class TestAbinitHetero:
             particles.path,
             "-o",
             outdir,
-            "--zdim",
-            "4",
-            "--lr",
-            ".0001",
-            "--enc-dim",
-            "8",
-            "--enc-layers",
-            "2",
-            "--dec-dim",
-            "8",
-            "--dec-layers",
-            "2",
-            "--pe-dim",
-            "8",
-            "--enc-only",
-            "--t-extent",
-            "4.0",
-            "--t-ngrid",
-            "2",
             "--pretrain",
             "1",
             "--num-epochs",
             "3",
-            "--ps-freq",
-            "2",
             "--no-analysis",
         ]
         if ctf.path is not None:
@@ -117,7 +120,9 @@ class TestAbinitHetero:
             os.path.join(kmeans_dir, f"vol_{(10 + vol_start_index):03d}.mrc")
         )
 
-    @pytest.mark.parametrize("nb_lbl", ["cryoDRGN_figures", "cryoDRGN_viz"])
+    @pytest.mark.parametrize(
+        "nb_lbl", ["cryoDRGN_figures", "cryoDRGN_viz", "cryoDRGN_filtering"]
+    )
     def test_notebooks(self, tmpdir_factory, particles, ctf, indices, nb_lbl):
         """Execute the demonstration Jupyter notebooks produced by analysis."""
 

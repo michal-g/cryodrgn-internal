@@ -275,29 +275,35 @@ class ModelAnalyzer:
         else:
             self.analyze_zN()
 
-        # Create Jupyter notebooks for data analysis and visualization by
-        # copying them over from the template codebase directory
-        out_ipynb = os.path.join(self.outdir, "cryoDRGN-analysis.ipynb")
+        for ipynb in ["cryoDRGN_figures", "cryoDRGN_filtering"]:
+            out_ipynb = os.path.join(self.outdir, f"{ipynb}.ipynb")
 
-        if not os.path.exists(out_ipynb):
-            self.logger.info("Creating analysis+visualization notebook...")
-            ipynb = os.path.join(
-                cryodrgn._ROOT, "templates", "cryoDRGN_filtering_template.ipynb"
-            )
-            shutil.copyfile(ipynb, out_ipynb)
-        else:
-            self.logger.info(f"{out_ipynb} already exists. Skipping")
+            if not os.path.exists(out_ipynb):
+                self.logger.info(f"Creating demo Jupyter notebook {out_ipynb}...")
+                ipynb = os.path.join(
+                    cryodrgn._ROOT, "templates", f"{ipynb}_template.ipynb"
+                )
+                shutil.copyfile(ipynb, out_ipynb)
+            else:
+                self.logger.info(f"{out_ipynb} already exists. Skipping")
 
-        # Edit the notebook with the epoch to analyze
-        with open(out_ipynb, "r") as f:
-            filter_ntbook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
+            # Edit the notebook with the epoch to analyze
+            with open(out_ipynb, "r") as f:
+                filter_ntbook = nbformat.read(f, as_version=nbformat.NO_CONVERT)
 
-        filter_ntbook["cells"][3]["source"] = filter_ntbook["cells"][3][
-            "source"
-        ].replace("EPOCH = None", f"EPOCH = {self.epoch}")
+            for cell in filter_ntbook["cells"]:
+                cell["source"] = cell["source"].replace(
+                    "WORKDIR = None", f"WORKDIR = '{self.outdir}'"
+                )
+                cell["source"] = cell["source"].replace(
+                    "EPOCH = None", f"EPOCH = {self.epoch}"
+                )
+                cell["source"] = cell["source"].replace(
+                    "KMEANS = None", f"KMEANS = {self.configs.ksample}"
+                )
 
-        with open(out_ipynb, "w") as f:
-            nbformat.write(filter_ntbook, f)
+            with open(out_ipynb, "w") as f:
+                nbformat.write(filter_ntbook, f)
 
         self.logger.info("Done")
 
@@ -324,7 +330,7 @@ class ModelAnalyzer:
         self.vg.gen_volumes(self.outdir, ztraj)
 
         kmeans_labels, centers = analysis.cluster_kmeans(
-            z[..., None], self.ksample, reorder=False
+            z[..., None], self.configs.ksample, reorder=False
         )
         centers, centers_ind = analysis.get_nearest_point(z[:, None], centers)
 
@@ -345,7 +351,7 @@ class ModelAnalyzer:
                 pca, self.z.shape[1], self.configs.n_per_pc, i + 1, start, end
             )
 
-            volpath = os.path.join(self.outdir, f"pc{i + 1}_{self.configs.n_per_pc}")
+            volpath = os.path.join(self.outdir, f"pc{i + 1}")
             self.vg.gen_volumes(volpath, z_pc)
 
         # Kmeans clustering
@@ -513,7 +519,7 @@ class ModelAnalyzer:
         # Plot PC trajectories
         for i in range(self.configs.pc):
             start, end = np.percentile(pc[:, i], (5, 95))
-            pc_path = os.path.join(self.outdir, f"pc{i + 1}_{self.configs.n_per_pc}")
+            pc_path = os.path.join(self.outdir, f"pc{i + 1}")
             z_pc = analysis.get_pc_traj(pca, self.z.shape[1], 10, i + 1, start, end)
 
             if umap_emb is not None:
