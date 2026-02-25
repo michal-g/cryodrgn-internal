@@ -3,7 +3,11 @@
 import pytest
 import argparse
 import os.path
-from cryodrgn.commands import analyze, abinit
+import pickle
+import numpy as np
+import nbformat
+from nbconvert.preprocessors import ExecutePreprocessor
+from cryodrgn.commands import analyze, abinit, filter
 
 
 @pytest.mark.parametrize(
@@ -17,6 +21,24 @@ from cryodrgn.commands import analyze, abinit
     ids=["hand,no.ind", "toy.txt,ind.rand.100", "toy.star,ind.f100"],
 )
 class TestAbinitHetero:
+
+    model_args = [
+        "--zdim",
+        "4",
+        "--lr",
+        ".0001",
+        "--hypervolume-dim",
+        "32",
+        "--hypervolume-layers",
+        "2",
+        "--pe-dim",
+        "4",
+        "--t-extent",
+        "4.0",
+        "--t-n-grid",
+        "2",
+    ]
+
     def get_outdir(self, tmpdir_factory, particles, ctf, indices):
         dirname = os.path.join("AbinitHet", particles.label, ctf.label, indices.label)
         odir = os.path.join(tmpdir_factory.getbasetemp(), dirname)
@@ -32,20 +54,7 @@ class TestAbinitHetero:
             particles.path,
             "-o",
             outdir,
-            "--zdim",
-            "4",
-            "--lr",
-            ".0001",
-            "--hypervolume-dim",
-            "128",
-            "--hypervolume-layers",
-            "3",
-            "--pe-dim",
-            "8",
-            "--t-extent",
-            "4.0",
-            "--t-n-grid",
-            "2",
+            *self.model_args,
             "--num-epochs",
             "3",
             "--epochs-pose-search",
@@ -118,16 +127,7 @@ class TestAbinitHetero:
             new_outdir,
             "--load",
             os.path.join(outdir, "weights.3.pkl"),
-            "--hypervolume-dim",
-            "128",
-            "--hypervolume-layers",
-            "3",
-            "--pe-dim",
-            "8",
-            "--t-extent",
-            "4.0",
-            "--t-n-grid",
-            "2",
+            *self.model_args,
             "--num-epochs",
             "5",
             "--checkpoint",
@@ -157,16 +157,7 @@ class TestAbinitHetero:
             new_outdir,
             "--load-poses",
             os.path.join(outdir, "pose.1.pkl"),
-            "--hypervolume-dim",
-            "128",
-            "--hypervolume-layers",
-            "3",
-            "--pe-dim",
-            "8",
-            "--t-extent",
-            "4.0",
-            "--t-n-grid",
-            "2",
+            *self.model_args,
             "--num-epochs",
             "4",
             "--epochs-pose-search",
@@ -184,3 +175,69 @@ class TestAbinitHetero:
         assert not os.path.exists(os.path.join(new_outdir, "weights.3.pkl"))
         assert os.path.exists(os.path.join(new_outdir, "weights.4.pkl"))
         assert not os.path.exists(os.path.join(new_outdir, "analyze.4"))
+
+    @pytest.mark.parametrize("nb_lbl", ["cryoDRGN_figures", "cryoDRGN_filtering"])
+    def test_notebooks(self, tmpdir_factory, particles, ctf, indices, nb_lbl):
+        """Execute the demonstration Jupyter notebooks produced by analysis."""
+
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        orig_cwd = os.path.abspath(os.getcwd())
+        os.chdir(os.path.join(outdir, "analyze.2"))
+        assert os.path.exists(f"{nb_lbl}.ipynb"), "Upstream tests have failed!"
+
+        with open(f"{nb_lbl}.ipynb") as ff:
+            nb_in = nbformat.read(ff, nbformat.NO_CONVERT)
+
+        ExecutePreprocessor(timeout=600, kernel_name="python3").preprocess(nb_in)
+        os.chdir(orig_cwd)
+
+    @pytest.mark.parametrize("plotind", [False, True], ids=["dontsave.ind", "save.ind"])
+    @pytest.mark.parametrize(
+        "epoch",
+        [
+            2,
+            pytest.param(
+                None,
+                marks=pytest.mark.xfail(
+                    raises=ValueError, reason="missing analysis epoch"
+                ),
+            ),
+        ],
+        ids=["epoch.2", "epoch.None"],
+    )
+    def test_interactive_filtering(
+        self, tmpdir_factory, particles, ctf, indices, epoch, plotind
+    ):
+        """Launch interface for filtering particles using model covariates."""
+
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        parser = argparse.ArgumentParser()
+        filter.add_args(parser)
+        args = [outdir, "--force"]
+        if epoch is not None:
+            args += ["--epoch", str(epoch)]
+            sel_dir = os.path.join(outdir, f"analyze.{epoch}")
+        else:
+            sel_dir = os.path.join(outdir, "analyze.3")
+        args += ["--sel-dir", sel_dir]
+
+        if plotind:
+            ind_fl = os.path.join(outdir, "tmp_ind_test.pkl")
+            with open(ind_fl, "wb") as f:
+                pickle.dump(np.array([1, 2]), f)
+            args += ["--plot-inds", ind_fl]
+
+        filter.main(parser.parse_args(args))
+        if plotind:
+            assert os.path.exists(os.path.join(sel_dir, "indices.pkl"))
+            with open(os.path.join(sel_dir, "indices.pkl"), "rb") as f:
+                inds = pickle.load(f)
+            assert isinstance(inds, np.ndarray)
+            assert len(inds) == 2
+            assert os.path.exists(os.path.join(sel_dir, "indices_inverse.pkl"))
+            with open(os.path.join(sel_dir, "indices_inverse.pkl"), "rb") as f:
+                inv_inds = pickle.load(f)
+            assert isinstance(inv_inds, np.ndarray)
+        else:
+            assert not os.path.exists(os.path.join(sel_dir, "indices.pkl"))
+            assert not os.path.exists(os.path.join(sel_dir, "indices_inverse.pkl"))
