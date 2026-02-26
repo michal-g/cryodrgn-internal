@@ -386,13 +386,13 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         help="Use an explicit volume (voxel array).",
     )
     group.add_argument(
-        "--hypervolume-layers",
+        "--layers",
         type=int,
         default=3,
         help="Number of hidden layers in the hypervolume (default: %(default)s).",
     )
     group.add_argument(
-        "--hypervolume-dim",
+        "--dim",
         type=int,
         default=256,
         help="Dimension of hidden layers in the hypervolume (default: %(default)s).",
@@ -713,6 +713,7 @@ class ModelTrainer:
         else:
             self.ctf_params = None
 
+        self.apix = self.ctf_params[0, 0] if self.ctf_params is not None else 1
         self.logger.info("Building lattice")
         self.lattice = Lattice(self.resolution, extent=0.5, device=self.device)
 
@@ -1618,7 +1619,7 @@ class ModelTrainer:
             zval = None
 
         vol = self.model.eval_volume(self.data.norm, zval=zval)
-        write_mrc(out_mrc, vol.cpu().numpy().astype(np.float32))
+        write_mrc(out_mrc, vol.cpu().numpy().astype(np.float32), Apix=self.apix)
 
     def save_model(self) -> None:
         """Write current PyTorch model state to file."""
@@ -1714,8 +1715,8 @@ def main(args: argparse.Namespace) -> None:
         kernel_size_cnn=args.kernel_size_cnn,
         resolution_encoder=args.resolution_encoder,
         explicit_volume=args.explicit_volume,
-        hypervolume_layers=args.hypervolume_layers,
-        hypervolume_dim=args.hypervolume_dim,
+        hypervolume_layers=args.layers,
+        hypervolume_dim=args.dim,
         pe_type=args.pe_type,
         pe_dim=args.pe_dim,
         feat_sigma=args.feat_sigma,
