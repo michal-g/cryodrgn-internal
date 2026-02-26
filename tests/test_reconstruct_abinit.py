@@ -7,7 +7,7 @@ import pickle
 import numpy as np
 import nbformat
 from nbconvert.preprocessors import ExecutePreprocessor
-from cryodrgn.commands import analyze, abinit, filter
+from cryodrgn.commands import analyze, abinit, filter, graph_traversal
 
 
 @pytest.mark.parametrize(
@@ -26,7 +26,7 @@ class TestAbinitHetero:
         "--zdim",
         "4",
         "--lr",
-        ".0001",
+        ".001",
         "--hypervolume-dim",
         "32",
         "--hypervolume-layers",
@@ -35,8 +35,10 @@ class TestAbinitHetero:
         "4",
         "--t-extent",
         "4.0",
-        "--t-n-grid",
+        "--t-ngrid",
         "2",
+        "--nkeptposes",
+        "4",
     ]
 
     def get_outdir(self, tmpdir_factory, particles, ctf, indices):
@@ -60,7 +62,7 @@ class TestAbinitHetero:
             "--epochs-pose-search",
             "1",
             "--n-imgs-pretrain",
-            "100",
+            "10",
             "--no-analysis",
             "--checkpoint",
             "1",
@@ -241,3 +243,26 @@ class TestAbinitHetero:
         else:
             assert not os.path.exists(os.path.join(sel_dir, "indices.pkl"))
             assert not os.path.exists(os.path.join(sel_dir, "indices_inverse.pkl"))
+
+    def test_graph_traversal(self, tmpdir_factory, particles, ctf, indices):
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        parser = argparse.ArgumentParser()
+        graph_traversal.add_args(parser)
+        args = parser.parse_args(
+            [
+                os.path.join(outdir, "z.3.pkl"),
+                "--anchors",
+                "3",
+                "5",
+                "8",
+                "--max-neighbors",
+                "50",
+                "--avg-neighbors",
+                "50",
+                "--outind",
+                os.path.join(outdir, "graph_traversal_path.3.txt"),
+                "--outtxt",
+                os.path.join(outdir, "graph_traversal_zpath.3.txt"),
+            ]
+        )
+        graph_traversal.main(args)

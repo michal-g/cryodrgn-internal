@@ -460,7 +460,7 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         "(default: %(default)s).",
     )
     group.add_argument(
-        "--n-iter",
+        "--niter",
         type=int,
         default=4,
         help="Number of pose search iterations (default: %(default)s).",
@@ -472,20 +472,20 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         help="Extent of the translation search grid, in pixels (default: %(default)s).",
     )
     group.add_argument(
-        "--t-n-grid",
+        "--t-ngrid",
         type=int,
         default=7,
         help="Number of points per dimension in the translation search grid "
         "(default: %(default)s).",
     )
     group.add_argument(
-        "--t-x-shift",
+        "--t-xshift",
         type=float,
         default=0.0,
         help="X-axis shift of the translation search grid (default: %(default)s).",
     )
     group.add_argument(
-        "--t-y-shift",
+        "--t-yshift",
         type=float,
         default=0.0,
         help="Y-axis shift of the translation search grid (default: %(default)s).",
@@ -496,7 +496,7 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         help="Bypass the translation search during pose search.",
     )
     group.add_argument(
-        "--n-kept-poses",
+        "--nkeptposes",
         type=int,
         default=8,
         help="Number of poses kept per image (default: %(default)s).",
@@ -1302,7 +1302,7 @@ class ModelTrainer:
             self.optimizers[key].zero_grad()
 
         # Forward pass
-        if self.scaler is not None:
+        if self.scaler is not None and not self.is_in_pose_search_step:
             amp_mode = torch.cuda.amp.autocast()
         else:
             amp_mode = contextlib.nullcontext()
@@ -1724,13 +1724,13 @@ def main(args: argparse.Namespace) -> None:
         n_imgs_pretrain=args.n_imgs_pretrain,
         l_start=args.l_start,
         l_end=args.l_end,
-        n_iter=args.n_iter,
+        n_iter=args.niter,
         t_extent=args.t_extent,
-        t_n_grid=args.t_n_grid,
-        t_x_shift=args.t_x_shift,
-        t_y_shift=args.t_y_shift,
+        t_n_grid=args.t_ngrid,
+        t_x_shift=args.t_xshift,
+        t_y_shift=args.t_yshift,
         no_trans_search_at_pose_search=args.no_trans_search_at_pose_search,
-        n_kept_poses=args.n_kept_poses,
+        n_kept_poses=args.nkeptposes,
         base_healpy=args.base_healpy,
         no_trans=args.no_trans,
         seed=args.seed,
