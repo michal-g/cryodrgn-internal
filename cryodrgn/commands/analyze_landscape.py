@@ -19,7 +19,7 @@ from datetime import datetime as dt
 import logging
 import joblib
 from tempfile import TemporaryDirectory
-from typing import Optional
+from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -31,8 +31,11 @@ from sklearn.decomposition import PCA
 
 from cryodrgn import analysis, utils
 from cryodrgn.commands.analyze import VolumeGenerator
+from cryodrgn.analysis_drgnai import VolumeGenerator as VolumeGeneratorDrgnai
 from cryodrgn.mrcfile import parse_mrc, write_mrc
 from cryodrgn.masking import cosine_dilation_mask
+from cryodrgn import models_ai
+from cryodrgn.lattice import Lattice
 import cryodrgn.config
 
 logger = logging.getLogger(__name__)
@@ -537,6 +540,46 @@ def analyze_volumes(
     plt.savefig(os.path.join(subdir, "umap_annotated.png"))
 
 
+def make_volume_generator(
+    weights_file: str, cfg_file: str, vol_args: dict, skip_vol: bool, device: str
+) -> Union[VolumeGenerator, VolumeGeneratorDrgnai]:
+    """Creates a volume generator for the model type used for this checkpoint."""
+    cfgs = cryodrgn.config.load(cfg_file)
+
+    if cfgs["cmd"][1] == "abinit":
+        checkpoint = torch.load(weights_file, weights_only=False)
+        hypervolume_params = checkpoint["hypervolume_params"]
+        hypervolume = models_ai.HyperVolume(**hypervolume_params)
+        hypervolume.load_state_dict(checkpoint["hypervolume_state_dict"])
+        hypervolume.eval()
+        hypervolume.to(device)
+
+        lattice = Lattice(
+            checkpoint["hypervolume_params"]["resolution"],
+            extent=0.5,
+            device=device,
+        )
+
+        zdim = checkpoint["hypervolume_params"]["z_dim"]
+        radius_mask = (
+            checkpoint["output_mask_radius"]
+            if "output_mask_radius" in checkpoint
+            else None
+        )
+        volume_generator = VolumeGeneratorDrgnai(
+            hypervolume,
+            lattice,
+            zdim,
+            cfgs["dataset_args"]["invert_data"],
+            radius_mask,
+            data_norm=(cfgs["data_norm_mean"], cfgs["data_norm_std"]),
+        )
+    else:
+        volume_generator = VolumeGenerator(weights_file, cfg_file, vol_args, skip_vol)
+
+    return volume_generator
+
+
 def main(args: argparse.Namespace) -> None:
     t1 = dt.now()
     logger.info(args)
@@ -546,9 +589,6 @@ def main(args: argparse.Namespace) -> None:
     zfile = os.path.join(workdir, f"z.{E}.pkl")
     weights = os.path.join(workdir, f"weights.{E}.pkl")
     cfg_file = os.path.join(workdir, "config.yaml")
-    cfg_file = (
-        cfg_file if os.path.exists(cfg_file) else os.path.join(workdir, "config.pkl")
-    )
     outdir = args.outdir or os.path.join(workdir, f"landscape.{E}")
     logger.info(f"Saving results to {outdir}")
     os.makedirs(outdir, exist_ok=True)
@@ -562,23 +602,19 @@ def main(args: argparse.Namespace) -> None:
         device=args.device,
         vol_start_index=args.vol_start_index,
     )
-    if args.multigpu and torch.cuda.is_available() and torch.cuda.device_count() > 1:
-        vg_list = [
-            VolumeGenerator(
-                weights,
-                cfg_file,
-                {
-                    **vol_args,
-                    "device": i,
-                    "vol_start_index": args.vol_start_index
-                    + i * (K // torch.cuda.device_count()),
-                },
-                skip_vol=args.skip_vol,
-            )
-            for i in range(torch.cuda.device_count())
-        ]
-    else:
-        vg_list = [VolumeGenerator(weights, cfg_file, vol_args, skip_vol=args.skip_vol)]
+    ngpu = (
+        torch.cuda.device_count() if torch.cuda.is_available() and args.multigpu else 1
+    )
+    vg_list = [
+        make_volume_generator(
+            weights,
+            cfg_file,
+            {**vol_args, "vol_start_index": args.vol_start_index + i * (K // ngpu)},
+            args.skip_vol,
+            args.device,
+        )
+        for i in range(ngpu)
+    ]
 
     if args.vol_ind is not None:
         args.vol_ind = utils.load_pkl(args.vol_ind)
