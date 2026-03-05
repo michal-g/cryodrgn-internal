@@ -546,7 +546,7 @@ def make_volume_generator(
     """Creates a volume generator for the model type used for this checkpoint."""
     cfgs = cryodrgn.config.load(cfg_file)
 
-    if cfgs["cmd"][1] == "abinit":
+    if "data_norm_mean" in cfgs:
         checkpoint = torch.load(weights_file, weights_only=False)
         hypervolume_params = checkpoint["hypervolume_params"]
         hypervolume = models_ai.HyperVolume(**hypervolume_params)
@@ -573,6 +573,7 @@ def make_volume_generator(
             cfgs["dataset_args"]["invert_data"],
             radius_mask,
             data_norm=(cfgs["data_norm_mean"], cfgs["data_norm_std"]),
+            vol_start_index=vol_args["vol_start_index"],
         )
     else:
         volume_generator = VolumeGenerator(weights_file, cfg_file, vol_args, skip_vol)

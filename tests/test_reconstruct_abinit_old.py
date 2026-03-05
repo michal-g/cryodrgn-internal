@@ -8,7 +8,14 @@ import pickle
 import numpy as np
 import nbformat
 from nbconvert.preprocessors import ExecutePreprocessor
-from cryodrgn.commands import analyze, eval_vol, filter, graph_traversal, abinit_het_old
+from cryodrgn.commands import (
+    analyze,
+    eval_vol,
+    filter,
+    graph_traversal,
+    abinit_het_old,
+    analyze_landscape,
+)
 
 
 @pytest.mark.parametrize(
@@ -212,6 +219,15 @@ class TestAbinitHetero:
             ]
         )
         graph_traversal.main(args)
+
+    def test_analyze_landscape(self, tmpdir_factory, particles, ctf, indices):
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        parser = argparse.ArgumentParser()
+        analyze_landscape.add_args(parser)
+        args = parser.parse_args(
+            [outdir, "3", "--sketch-size", "10", "-M", "3", "--pc-dim", "5"]
+        )
+        analyze_landscape.main(args)
 
     def test_eval_volume(self, tmpdir_factory, particles, ctf, indices):
         outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)

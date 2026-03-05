@@ -445,6 +445,9 @@ class VolumeGenerator:
 
 def main(args: argparse.Namespace) -> None:
     workdir = args.workdir
+    if not os.path.exists(workdir):
+        raise FileNotFoundError(f"cryoDRGN output directory {workdir} not found!")
+
     cfg = (
         f"{workdir}/config.yaml"
         if os.path.exists(f"{workdir}/config.yaml")

@@ -7,7 +7,13 @@ import pickle
 import numpy as np
 import nbformat
 from nbconvert.preprocessors import ExecutePreprocessor
-from cryodrgn.commands import analyze, abinit, filter, graph_traversal
+from cryodrgn.commands import (
+    analyze,
+    abinit,
+    analyze_landscape,
+    filter,
+    graph_traversal,
+)
 
 
 @pytest.mark.parametrize(
@@ -266,3 +272,20 @@ class TestAbinitHetero:
             ]
         )
         graph_traversal.main(args)
+
+    def test_analyze_landscape(self, tmpdir_factory, particles, ctf, indices):
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        parser = argparse.ArgumentParser()
+        analyze_landscape.add_args(parser)
+        args = parser.parse_args(
+            [outdir, "3", "--sketch-size", "10", "-M", "3", "--pc-dim", "5"]
+        )
+        analyze_landscape.main(args)
+        assert os.path.exists(os.path.join(outdir, "landscape.3"))
+        assert os.path.exists(os.path.join(outdir, "landscape.3", "umap.pkl"))
+        assert os.path.exists(os.path.join(outdir, "landscape.3", "vol_pca_obj.pkl"))
+        assert os.path.exists(os.path.join(outdir, "landscape.3", "kmeans10"))
+        for i in range(1, 11):
+            assert os.path.exists(
+                os.path.join(outdir, "landscape.3", "kmeans10", f"vol_{i:03d}.mrc")
+            )
