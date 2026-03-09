@@ -22,6 +22,106 @@ from cryodrgn.commands import (
     [
         ("hand", None, "CTF-Test.100"),
         ("toy.txt", "random-100", "CTF-Test"),
+    ],
+    indirect=True,
+)
+class TestAbinitHomo:
+
+    model_args = [
+        "--zdim",
+        "0",
+        "--lr",
+        ".001",
+        "--dim",
+        "16",
+        "--layers",
+        "2",
+        "--pe-dim",
+        "4",
+        "--t-extent",
+        "4.0",
+        "--t-ngrid",
+        "2",
+        "--nkeptposes",
+        "4",
+    ]
+
+    def get_outdir(self, tmpdir_factory, particles, ctf, indices):
+        dirname = os.path.join("AbinitHomo", particles.label, ctf.label, indices.label)
+        odir = os.path.join(tmpdir_factory.getbasetemp(), dirname)
+        os.makedirs(odir, exist_ok=True)
+
+        return odir
+
+    def test_train_model(self, tmpdir_factory, particles, ctf, indices):
+        """Train the initial homogeneous model."""
+
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        args = [
+            particles.path,
+            "-o",
+            outdir,
+            *self.model_args,
+            "--num-epochs",
+            "3",
+            "--epochs-pose-search",
+            "1",
+            "--n-imgs-pretrain",
+            "10",
+            "--no-analysis",
+            "--checkpoint",
+            "1",
+        ]
+        if ctf.path is not None:
+            args += ["--ctf", ctf.path]
+        if indices.path is not None:
+            args += ["--ind", indices.path]
+
+        parser = argparse.ArgumentParser()
+        abinit.add_args(parser)
+        abinit.main(parser.parse_args(args))
+
+        assert os.path.exists(os.path.join(outdir, "weights.2.pkl"))
+        assert os.path.exists(os.path.join(outdir, "weights.3.pkl"))
+        assert not os.path.exists(os.path.join(outdir, "analyze.2"))
+        assert not os.path.exists(os.path.join(outdir, "analyze.3"))
+
+    def test_load_checkpoint(self, tmpdir_factory, particles, ctf, indices):
+        """Load a checkpoint and continue training."""
+
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        new_outdir = os.path.join(outdir, "checkpoint")
+        parser = argparse.ArgumentParser()
+        abinit.add_args(parser)
+        args = [
+            particles.path,
+            "-o",
+            new_outdir,
+            "--load",
+            os.path.join(outdir, "weights.3.pkl"),
+            *self.model_args,
+            "--num-epochs",
+            "5",
+            "--checkpoint",
+            "3",
+        ]
+        if ctf.path is not None:
+            args += ["--ctf", ctf.path]
+        if indices.path is not None:
+            args += ["--ind", indices.path]
+
+        abinit.main(parser.parse_args(args))
+        assert not os.path.exists(os.path.join(new_outdir, "weights.4.pkl"))
+        assert os.path.exists(os.path.join(new_outdir, "weights.5.pkl"))
+        assert not os.path.exists(os.path.join(new_outdir, "analyze.4"))
+        assert os.path.exists(os.path.join(new_outdir, "analyze.5"))
+
+
+@pytest.mark.parametrize(
+    "particles, indices, ctf",
+    [
+        ("hand", None, "CTF-Test.100"),
+        ("toy.txt", "random-100", "CTF-Test"),
         ("toy.star", "first-100", "CTF-Test"),
     ],
     indirect=True,
