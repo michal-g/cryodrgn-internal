@@ -11,6 +11,7 @@ from cryodrgn.commands import (
     analyze,
     abinit,
     analyze_landscape,
+    analyze_landscape_full,
     filter,
     graph_traversal,
 )
@@ -34,7 +35,7 @@ class TestAbinitHetero:
         "--lr",
         ".001",
         "--dim",
-        "32",
+        "16",
         "--layers",
         "2",
         "--pe-dim",
@@ -278,9 +279,21 @@ class TestAbinitHetero:
         parser = argparse.ArgumentParser()
         analyze_landscape.add_args(parser)
         args = parser.parse_args(
-            [outdir, "3", "--sketch-size", "10", "-M", "3", "--pc-dim", "5"]
+            [
+                outdir,
+                "3",
+                "--sketch-size",
+                "10",
+                "-M",
+                "3",
+                "--pc-dim",
+                "5",
+                "--downsample",
+                "64",
+            ]
         )
         analyze_landscape.main(args)
+
         assert os.path.exists(os.path.join(outdir, "landscape.3"))
         assert os.path.exists(os.path.join(outdir, "landscape.3", "umap.pkl"))
         assert os.path.exists(os.path.join(outdir, "landscape.3", "vol_pca_obj.pkl"))
@@ -289,3 +302,14 @@ class TestAbinitHetero:
             assert os.path.exists(
                 os.path.join(outdir, "landscape.3", "kmeans10", f"vol_{i:03d}.mrc")
             )
+
+    def test_analyze_landscape_full(self, tmpdir_factory, particles, ctf, indices):
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        parser = argparse.ArgumentParser()
+        analyze_landscape_full.add_args(parser)
+        args = parser.parse_args([outdir, "3", "-N", "10", "--downsample", "64"])
+        analyze_landscape_full.main(args)
+
+        landfull_dir = os.path.join(outdir, "landscape.3", "landscape_full")
+        assert os.path.exists(os.path.join(landfull_dir, "vol_pca_sampled.pkl"))
+        assert os.path.exists(os.path.join(landfull_dir, "z.sampled.pkl"))

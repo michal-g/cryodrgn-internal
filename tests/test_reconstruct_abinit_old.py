@@ -15,6 +15,7 @@ from cryodrgn.commands import (
     graph_traversal,
     abinit_het_old,
     analyze_landscape,
+    analyze_landscape_full,
 )
 
 
@@ -225,9 +226,27 @@ class TestAbinitHetero:
         parser = argparse.ArgumentParser()
         analyze_landscape.add_args(parser)
         args = parser.parse_args(
-            [outdir, "3", "--sketch-size", "10", "-M", "3", "--pc-dim", "5"]
+            [
+                outdir,
+                "2",
+                "--sketch-size",
+                "10",
+                "-M",
+                "3",
+                "--pc-dim",
+                "5",
+                "--downsample",
+                "16",
+            ]
         )
         analyze_landscape.main(args)
+
+    def test_analyze_landscape_full(self, tmpdir_factory, particles, ctf, indices):
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        parser = argparse.ArgumentParser()
+        analyze_landscape_full.add_args(parser)
+        args = parser.parse_args([outdir, "2", "-N", "10", "--downsample", "16"])
+        analyze_landscape_full.main(args)
 
     def test_eval_volume(self, tmpdir_factory, particles, ctf, indices):
         outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)

@@ -553,13 +553,7 @@ def make_volume_generator(
         hypervolume.load_state_dict(checkpoint["hypervolume_state_dict"])
         hypervolume.eval()
         hypervolume.to(device)
-
-        lattice = Lattice(
-            checkpoint["hypervolume_params"]["resolution"],
-            extent=0.5,
-            device=device,
-        )
-
+        lattice = Lattice(vol_args["downsample"] + 1, extent=0.5, device=device)
         zdim = checkpoint["hypervolume_params"]["z_dim"]
         radius_mask = (
             checkpoint["output_mask_radius"]
