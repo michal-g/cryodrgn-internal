@@ -339,8 +339,8 @@ def add_args(parser: argparse.ArgumentParser) -> None:
     group.add_argument(
         "--zdim",
         type=int,
-        default=4,
-        help="Dimension of conformations (default: %(default)s).",
+        help="Dimension of conformation latent space; required.",
+        required=True,
     )
     group.add_argument(
         "--std-z-init",
