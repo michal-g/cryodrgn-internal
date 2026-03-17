@@ -1,5 +1,12 @@
-"""Reconstructing volume(s) from picked cryoEM/ET particles using cryoDRGN-AI."""
+"""Reconstructing volume(s) from picked cryoEM/ET particles using cryoDRGN-AI.
 
+Example usage
+-------------
+# Run with fifty total training epochs, the first three of which are for pose search
+$ cryodrgn abinit particles.mrcs -o cryodrgn-outs/001_abinit --zdim 8 \
+                                   --ctf ctf.pkl -n 50
+
+"""
 import os
 import sys
 import argparse
@@ -662,6 +669,9 @@ class ModelTrainer:
         self.logger.info("Creating dataset")
         if self.configs.norm is None:
             norm_mean, norm_std = None, None
+
+        # If user provides two values for data norm use them as the mean and standard
+        # deviation; if one number is provided, use it as the mean and set std to 1.0
         elif isinstance(self.configs.norm, (list, tuple)):
             norm_mean, norm_std = self.configs.norm
         else:
@@ -737,23 +747,21 @@ class ModelTrainer:
         else:
             raise NotImplementedError
 
-        # Set up the pose search parameters
+        # Set up pose search epoch scheduling based on user inputs
+        # Default number of pose search epochs is 3 (warmup, training, refinement) and
+        # minimum number of pose search epochs is 2
+        self.num_epochs = self.configs.num_epochs
         if self.configs.n_imgs_pose_search is not None:
             self.epochs_pose_search = max(
                 2, self.configs.n_imgs_pose_search // self.n_particles_dataset + 1
             )
         elif self.configs.epochs_pose_search is not None:
             self.epochs_pose_search = self.configs.epochs_pose_search
-        elif self.configs.epochs_sgd is not None:
-            self.epochs_pose_search = max(
-                2, self.configs.num_epochs - self.configs.epochs_sgd
-            )
         else:
-            self.epochs_pose_search = 2
+            self.epochs_pose_search = 3
 
         if self.configs.epochs_sgd is None:
-            self.configs.epochs_sgd = self.configs.num_epochs - self.epochs_pose_search
-            self.num_epochs = self.configs.num_epochs
+            self.configs.epochs_sgd = self.num_epochs - self.epochs_pose_search
         else:
             self.num_epochs = self.epochs_pose_search + self.configs.epochs_sgd
 
