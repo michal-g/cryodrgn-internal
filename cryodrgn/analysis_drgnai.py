@@ -1,7 +1,6 @@
 """Visualizing latent space and generating volumes for trained models."""
 
 import os
-import argparse
 import shutil
 import logging
 from types import SimpleNamespace
@@ -22,80 +21,6 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templat
 matplotlib.use("Agg")
 
 
-def add_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "workdir", type=os.path.abspath, help="Directory with cryoDRGN results"
-    )
-    parser.add_argument(
-        "epoch",
-        type=int,
-        help="Epoch number N to analyze (1-based indexing, corresponding to z.N.pkl, weights.N.pkl)",
-    )
-    parser.add_argument("--device", type=int, help="Optionally specify CUDA device")
-    parser.add_argument(
-        "-o",
-        "--outdir",
-        help="Output directory for analysis results (default: [workdir]/analyze.[epoch])",
-    )
-    parser.add_argument(
-        "--skip-vol", action="store_true", help="Skip generation of volumes"
-    )
-    parser.add_argument("--skip-umap", action="store_true", help="Skip running UMAP")
-
-    group = parser.add_argument_group("Modify number of volumes to generate")
-    group.add_argument(
-        "--pc",
-        type=int,
-        default=2,
-        help="Number of principal component traversals to generate (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--n-per-pc",
-        type=int,
-        default=10,
-        help="Number of samples of the latent reconstruction space to take along each principal component axis (default: %(default)s)",
-    )
-    group.add_argument(
-        "--ksample",
-        type=int,
-        default=20,
-        help="Number of kmeans samples to generate (default: %(default)s)",
-    )
-
-    group = parser.add_argument_group("Volume post-processing")
-    group.add_argument(
-        "--Apix",
-        type=float,
-        help="Pixel size to add to .mrc header (default is to infer from ctf.pkl file else 1)",
-    )
-    group.add_argument(
-        "--flip", action="store_true", help="Flip handedness of output volumes"
-    )
-    group.add_argument(
-        "--invert", action="store_true", help="Invert contrast of output volumes"
-    )
-    group.add_argument(
-        "-d",
-        "--downsample",
-        type=int,
-        help="Downsample volumes to this box size (pixels)",
-    )
-    group.add_argument(
-        "--low-pass", type=float, help="Low-pass filter resolution in Angstroms"
-    )
-    group.add_argument(
-        "--crop",
-        type=int,
-        help="crop volume to this box size after downsampling or low-pass filtering (pixels)",
-    )
-    group.add_argument(
-        "--vol-start-index",
-        type=int,
-        default=1,
-        help="Default value of start index for volume generation (default: %(default)s)",
-    )
-
-
 class VolumeGenerator:
     """Helper class to call analysis.gen_volumes"""
 
@@ -108,6 +33,7 @@ class VolumeGenerator:
         radius_mask,
         data_norm=(0, 1),
         vol_start_index=1,
+        apix=1.0,
     ):
         self.hypervolume = hypervolume
         self.lattice = lattice
@@ -116,6 +42,7 @@ class VolumeGenerator:
         self.radius_mask = radius_mask
         self.data_norm = data_norm
         self.vol_start_index = vol_start_index
+        self.apix = apix
 
     def gen_volumes(self, outdir, z_values, suffix=None):
         """
@@ -145,7 +72,7 @@ class VolumeGenerator:
             if self.invert:
                 vol *= -1
 
-            write_mrc(out_mrc, vol.cpu().numpy().astype(np.float32))
+            write_mrc(out_mrc, vol.cpu().numpy().astype(np.float32), Apix=self.apix)
 
 
 class ModelAnalyzer:
@@ -244,6 +171,7 @@ class ModelAnalyzer:
             self.configs.invert,
             radius_mask,
             data_norm=(self.out_cfgs["data_norm_mean"], self.out_cfgs["data_norm_std"]),
+            apix=self.configs.apix,
         )
 
         # Load the conformations if the using a heterogeneous reconstruction model

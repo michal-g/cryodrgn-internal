@@ -455,35 +455,6 @@ def main(args: argparse.Namespace) -> None:
     )
     configs = config.load(cfg)
 
-    # If the output folder ran a cryoDRGN-AI model use this method's analysis instead
-    workdir = args.workdir
-    if "data_norm_mean" in configs:
-        anlz_cfg = dict(
-            epoch=args.epoch,
-            device=args.device,
-            outdir=args.outdir,
-            skip_vol=args.skip_vol,
-            skip_umap=args.skip_umap,
-            pc=args.pc,
-            n_per_pc=args.n_per_pc,
-            ksample=args.ksample,
-            apix=args.Apix,
-            flip=args.flip,
-            invert=args.invert,
-            downsample=args.downsample,
-        )
-        ModelAnalyzer(args.workdir, anlz_cfg, configs).analyze()
-        return
-
-    matplotlib.use("Agg")  # non-interactive backend
-    t1 = dt.now()
-    E = args.epoch
-    epoch = args.epoch
-
-    zfile = f"{workdir}/z.{E}.pkl"
-    weights = f"{workdir}/weights.{E}.pkl"
-    outdir = f"{workdir}/analyze.{E}"
-
     if args.Apix:
         use_apix = args.Apix
 
@@ -519,6 +490,35 @@ def main(args: argparse.Namespace) -> None:
         else:
             use_apix = 1.0
             logger.info("Cannot find A/px in CTF parameters, defaulting to A/px=1.0")
+
+    # If the output folder ran a cryoDRGN-AI model use this method's analysis instead
+    workdir = args.workdir
+    if "data_norm_mean" in configs:
+        anlz_cfg = dict(
+            epoch=args.epoch,
+            device=args.device,
+            outdir=args.outdir,
+            skip_vol=args.skip_vol,
+            skip_umap=args.skip_umap,
+            pc=args.pc,
+            n_per_pc=args.n_per_pc,
+            ksample=args.ksample,
+            apix=use_apix,
+            flip=args.flip,
+            invert=args.invert,
+            downsample=args.downsample,
+        )
+        ModelAnalyzer(args.workdir, anlz_cfg, configs).analyze()
+        return
+
+    matplotlib.use("Agg")  # non-interactive backend
+    t1 = dt.now()
+    E = args.epoch
+    epoch = args.epoch
+
+    zfile = f"{workdir}/z.{E}.pkl"
+    weights = f"{workdir}/weights.{E}.pkl"
+    outdir = f"{workdir}/analyze.{E}"
 
     if E == -1:
         zfile = f"{workdir}/z.pkl"

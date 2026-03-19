@@ -1777,7 +1777,7 @@ def main(args: argparse.Namespace) -> None:
             "pc": 2,
             "n_per_pc": 10,
             "ksample": 20,
-            "apix": None,
+            "apix": trainer.apix or 1.0,
             "flip": False,
             "downsample": None,
             "vol_start_index": 1,
