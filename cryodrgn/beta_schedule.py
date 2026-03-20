@@ -2,7 +2,7 @@ import numpy as np
 
 
 def get_beta_schedule(schedule):
-    if type(schedule) == float:
+    if isinstance(schedule, float):
         return ConstantSchedule(schedule)
     elif schedule == "a":
         return LinearSchedule(0.001, 15, 0, 1000000)

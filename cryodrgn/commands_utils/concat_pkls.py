@@ -16,7 +16,7 @@ def add_args(parser):
 
 def main(args):
     x = [pickle.load(open(f, "rb")) for f in args.input]
-    if type(x[0]) == tuple:  # pose tuples
+    if isinstance(x[0], tuple):  # pose tuples
         r = [xx[0] for xx in x]
         t = [xx[1] for xx in x]
         r2 = np.concatenate(r)

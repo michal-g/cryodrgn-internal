@@ -390,10 +390,7 @@ def train_batch(
 
     # Cast operations to mixed precision if using torch.cuda.amp.GradScaler()
     if scaler is not None:
-        try:
-            amp_mode = torch.amp.autocast("cuda")
-        except AttributeError:
-            amp_mode = torch.cuda.amp.autocast_mode.autocast()
+        amp_mode = torch.cuda.amp.autocast()
     else:
         amp_mode = contextlib.nullcontext()
 
@@ -533,12 +530,12 @@ def eval_z(
         seed=seed,
     )
     for i, minibatch in enumerate(data_generator):
-        ind = minibatch[-1]
-        y = minibatch[0].to(device)
+        ind = minibatch["index"]
+        y = minibatch["y"].to(device)
         D = lattice.D
         if use_tilt:
             y = y.view(-1, D, D)
-            ind = minibatch[1].to(device).view(-1)
+            ind = minibatch["tilt_index"].to(device).view(-1)
         B = len(ind)
 
         c = None
@@ -869,15 +866,12 @@ def main(args: argparse.Namespace) -> None:
             model, optim = amp.initialize(model, optim, opt_level="O1")
         # mixed precision with pytorch (v1.6+)
         except:  # noqa: E722
-            try:
-                scaler = torch.amp.GradScaler("cuda")
-            except AttributeError:
-                scaler = torch.cuda.amp.grad_scaler.GradScaler()
+            scaler = torch.cuda.amp.GradScaler()
 
     # restart from checkpoint
     if args.load:
         logger.info("Loading checkpoint from {}".format(args.load))
-        checkpoint = torch.load(args.load)
+        checkpoint = torch.load(args.load, weights_only=False)
         model.load_state_dict(checkpoint["model_state_dict"])
         optim.load_state_dict(checkpoint["optimizer_state_dict"])
         start_epoch = checkpoint["epoch"] + 1
@@ -924,8 +918,8 @@ def main(args: argparse.Namespace) -> None:
         kld_accum = 0
         batch_it = 0
         for i, minibatch in enumerate(data_generator):  # minibatch: [y, ind]
-            ind = minibatch[-1].to(device)
-            y = minibatch[0].to(device)
+            ind = minibatch["index"].to(device)
+            y = minibatch["y"].to(device)
             B = len(ind)
             batch_it += B
             global_it = Nparticles * (epoch - 1) + batch_it
@@ -941,7 +935,7 @@ def main(args: argparse.Namespace) -> None:
 
             dose_filters = None
             if args.encode_mode == "tilt":
-                tilt_ind = minibatch[1].to(device)
+                tilt_ind = minibatch["tilt_index"].to(device)
                 assert all(tilt_ind >= 0), tilt_ind
                 rot, tran = posetracker.get_pose(tilt_ind.view(-1))
                 ctf_param = (

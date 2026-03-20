@@ -81,8 +81,9 @@ def main_commands() -> None:
     _get_commands(
         cmd_dir=os.path.join(os.path.dirname(__file__), "commands"),
         cmds=[
-            "abinit_het",
-            "abinit_homo",
+            "abinit",
+            "abinit_het_old",
+            "abinit_homo_old",
             "analyze",
             "analyze_landscape",
             "analyze_landscape_full",

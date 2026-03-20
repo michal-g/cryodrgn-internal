@@ -16,7 +16,7 @@ print("Use cuda {}".format(use_cuda))
 
 def load_model(path, D):
     print(f"Loading model from {path}")
-    ckpt = torch.load(path)
+    ckpt = torch.load(path, weights_only=False)
     model = models.get_decoder(3, D, 3, 256, "hartley", "geom_lowf")
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()

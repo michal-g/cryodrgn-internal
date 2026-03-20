@@ -29,6 +29,7 @@ import numpy as np
 import seaborn as sns
 import cryodrgn
 from cryodrgn import analysis, utils, config
+from cryodrgn.analysis_drgnai import ModelAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,12 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         type=int,
         default=2,
         help="Number of principal component traversals to generate (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--n-per-pc",
+        type=int,
+        default=10,
+        help="Number of samples of the latent reconstruction space to take along each principal component axis (default: %(default)s)",
     )
     group.add_argument(
         "--ksample",
@@ -100,10 +107,8 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         help="Default value of start index for volume generation (default: %(default)s)",
     )
 
-    return parser
 
-
-def analyze_z1(z, outdir, vg):
+def analyze_z1(z, outdir, vg, n_per_pc=10):
     """Plotting and volume generation for 1D z"""
     assert z.shape[1] == 1
     z = z.reshape(-1)
@@ -120,7 +125,7 @@ def analyze_z1(z, outdir, vg):
     plt.xlabel("z")
     plt.savefig(f"{outdir}/z_hist.png")
 
-    ztraj = np.percentile(z, np.linspace(5, 95, 10))
+    ztraj = np.percentile(z, np.linspace(5, 95, n_per_pc))
     vg.gen_volumes(outdir, ztraj)
 
 
@@ -134,6 +139,7 @@ def analyze_zN(
     num_pcs=2,
     num_ksamples=20,
     vol_start_index=1,
+    n_per_pc=10,
 ):
     zdim = z.shape[1]
 
@@ -143,7 +149,7 @@ def analyze_zN(
     logger.info("Generating volumes...")
     for i in range(num_pcs):
         start, end = np.percentile(pc[:, i], (5, 95))
-        z_pc = analysis.get_pc_traj(pca, z.shape[1], 10, i + 1, start, end)
+        z_pc = analysis.get_pc_traj(pca, z.shape[1], n_per_pc, i + 1, start, end)
         vg.gen_volumes(f"{outdir}/pc{i+1}", z_pc)
 
     # kmeans clustering
@@ -329,7 +335,7 @@ def analyze_zN(
     # Plot PC trajectories
     for i in range(num_pcs):
         start, end = np.percentile(pc[:, i], (5, 95))
-        z_pc = analysis.get_pc_traj(pca, z.shape[1], 10, i + 1, start, end)
+        z_pc = analysis.get_pc_traj(pca, z.shape[1], n_per_pc, i + 1, start, end)
         if umap_emb is not None:
             # UMAP, colored by PCX
             analysis.scatter_color(
@@ -382,16 +388,16 @@ def analyze_zN(
             plt.savefig(f"{outdir}/pc{i+1}/umap_traversal_connected.png")
             plt.close()
 
-        # 10 points, from 5th to 95th percentile of PC1 values
-        t = np.linspace(start, end, 10, endpoint=True)
+        # `n_per_pc` points, from 5th to 95th percentile of PC1 values
+        t = np.linspace(start, end, n_per_pc, endpoint=True)
         plt.figure(figsize=(4, 4))
         if i > 0 and i == num_pcs - 1:
             plt.scatter(pc[:, i - 1], pc[:, i], alpha=0.1, s=1, rasterized=True)
-            plt.scatter(np.zeros(10), t, c="cornflowerblue", edgecolor="white")
+            plt.scatter(np.zeros(n_per_pc), t, c="cornflowerblue", edgecolor="white")
             plt_pc_labels(i - 1, i)
         else:
             plt.scatter(pc[:, i], pc[:, i + 1], alpha=0.1, s=1, rasterized=True)
-            plt.scatter(t, np.zeros(10), c="cornflowerblue", edgecolor="white")
+            plt.scatter(t, np.zeros(n_per_pc), c="cornflowerblue", edgecolor="white")
             plt_pc_labels(i, i + 1)
         plt.tight_layout()
         plt.savefig(f"{outdir}/pc{i+1}/pca_traversal.png")
@@ -401,13 +407,17 @@ def analyze_zN(
             g = sns.jointplot(
                 x=pc[:, i - 1], y=pc[:, i], alpha=0.1, s=1, rasterized=True, height=4
             )
-            g.ax_joint.scatter(np.zeros(10), t, c="cornflowerblue", edgecolor="white")
+            g.ax_joint.scatter(
+                np.zeros(n_per_pc), t, c="cornflowerblue", edgecolor="white"
+            )
             plt_pc_labels_jointplot(g, i - 1, i)
         else:
             g = sns.jointplot(
                 x=pc[:, i], y=pc[:, i + 1], alpha=0.1, s=1, rasterized=True, height=4
             )
-            g.ax_joint.scatter(t, np.zeros(10), c="cornflowerblue", edgecolor="white")
+            g.ax_joint.scatter(
+                t, np.zeros(n_per_pc), c="cornflowerblue", edgecolor="white"
+            )
             plt_pc_labels_jointplot(g)
         plt.tight_layout()
         plt.savefig(f"{outdir}/pc{i+1}/pca_traversal_hex.png")
@@ -434,22 +444,16 @@ class VolumeGenerator:
 
 
 def main(args: argparse.Namespace) -> None:
-    matplotlib.use("Agg")  # non-interactive backend
-    t1 = dt.now()
-    E = args.epoch
     workdir = args.workdir
-    epoch = args.epoch
+    if not os.path.exists(workdir):
+        raise FileNotFoundError(f"cryoDRGN output directory {workdir} not found!")
 
-    zfile = f"{workdir}/z.{E}.pkl"
-    weights = f"{workdir}/weights.{E}.pkl"
     cfg = (
         f"{workdir}/config.yaml"
         if os.path.exists(f"{workdir}/config.yaml")
         else f"{workdir}/config.pkl"
     )
-
     configs = config.load(cfg)
-    outdir = f"{workdir}/analyze.{E}"
 
     if args.Apix:
         use_apix = args.Apix
@@ -487,6 +491,35 @@ def main(args: argparse.Namespace) -> None:
             use_apix = 1.0
             logger.info("Cannot find A/px in CTF parameters, defaulting to A/px=1.0")
 
+    # If the output folder ran a cryoDRGN-AI model use this method's analysis instead
+    workdir = args.workdir
+    if "data_norm_mean" in configs:
+        anlz_cfg = dict(
+            epoch=args.epoch,
+            device=args.device,
+            outdir=args.outdir,
+            skip_vol=args.skip_vol,
+            skip_umap=args.skip_umap,
+            pc=args.pc,
+            n_per_pc=args.n_per_pc,
+            ksample=args.ksample,
+            apix=use_apix,
+            flip=args.flip,
+            invert=args.invert,
+            downsample=args.downsample,
+        )
+        ModelAnalyzer(args.workdir, anlz_cfg, configs).analyze()
+        return
+
+    matplotlib.use("Agg")  # non-interactive backend
+    t1 = dt.now()
+    E = args.epoch
+    epoch = args.epoch
+
+    zfile = f"{workdir}/z.{E}.pkl"
+    weights = f"{workdir}/weights.{E}.pkl"
+    outdir = f"{workdir}/analyze.{E}"
+
     if E == -1:
         zfile = f"{workdir}/z.pkl"
         weights = f"{workdir}/weights.pkl"
@@ -514,7 +547,7 @@ def main(args: argparse.Namespace) -> None:
     vg = VolumeGenerator(weights, cfg, vol_args, skip_vol=args.skip_vol)
 
     if zdim == 1:
-        analyze_z1(z, outdir, vg)
+        analyze_z1(z, outdir, vg, n_per_pc=args.n_per_pc)
     else:
         analyze_zN(
             z,
@@ -526,6 +559,7 @@ def main(args: argparse.Namespace) -> None:
             num_pcs=args.pc,
             num_ksamples=args.ksample,
             vol_start_index=args.vol_start_index,
+            n_per_pc=args.n_per_pc,
         )
 
     # Create demonstration Jupyter notebooks from templates if they don't already exist

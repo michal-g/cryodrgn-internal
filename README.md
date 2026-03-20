@@ -13,31 +13,18 @@ a *continuous* distribution over 3D structures by using a neural network based r
 
 ## Documentation
 
-The latest documentation for cryoDRGN is available in our [user guide](https://ez-lab.gitbook.io/cryodrgn/), including an overview and walkthrough of
-cryoDRGN installation, training and analysis. A brief quick start is provided below.
+The latest documentation for cryoDRGN is available in our [user guide](https://ez-lab.gitbook.io/cryodrgn/), including
+an overview and walkthrough of cryoDRGN installation, training and analysis. A brief quick start is provided below.
 
 For any feedback, questions, or bugs, please file a Github issue or start a Github discussion.
 
 
-### Updates in Version 3.5.x
-* 1-indexing of output volumes and epochs replacing the previous 0-indexing
-* [NEW] volume reconstruction using an autodecoder with `cryodrgn train_dec` *(beta)*
-* [NEW] `cryodrgn parse_relion` for parsing RELION5 3D tomo files to the cryoDRGN 2D input format
-* improved landscape analysis using Leiden clustering
-* official support for Python 3.12, deprecating support for Python 3.9
-* [NEW] consolidated `cryodrgn parse_star` command (merging `parse_pose_star` and `parse_ctf_star`)
-* `analyze` is now run automatically on the final epoch once model training is complete
-* faster backprojection and downsampling; `--multigpu` for faster landscape analysis
-
-
-### Updates in Version 3.x
-
-The official release of [cryoDRGN-ET](https://www.biorxiv.org/content/10.1101/2023.08.18.553799v1) for heterogeneous subtomogram analysis.
-
-* [NEW] Heterogeneous reconstruction of subtomograms. See documentation [on gitbook](https://ez-lab.gitbook.io/cryodrgn/)
-* Updated `cryodrgn backproject_voxel` for voxel-based homogeneous reconstruction
-* Major refactor of dataset loading for handling large datasets
-
+### Updates in Version 4.2.x
+* [NEW] cryoDRGN-AI *ab initio* reconstruction method integrated into cryoDRGN as `cryodrgn abinit`
+	* former ab-initio reconstruction methods are deprecated as `cryodrgn abinit_het_old` and `cryodrgn abinit_homo_old`
+	* `cryodrgn analyze`, `landscape`, etc. now support cryoDRGN-AI models as well as the previous cryoDRGN models
+* more memory-efficient *ab initio* reconstruction
+* support for Python 3.13 and PyTorch 2.9; PyTorch <2.0 is no longer supported
 
 A full list of cryoDRGN version updates can be found at our
 [release notes](https://github.com/ml-struct-bio/cryodrgn/releases).
@@ -46,10 +33,11 @@ A full list of cryoDRGN version updates can be found at our
 ## Installation
 
 `cryodrgn` may be installed via `pip`, and we recommend installing `cryodrgn` in a clean conda environment.
-Our package is compatible with Python versions 3.10 through 3.12; we recommend using the latest available Python version:
+Our package is compatible with Python versions 3.10 through 3.13;
+we recommend using the latest available Python version:
 
     # Create and activate conda environment
-    (base) $ conda create --name cryodrgn python=3.12
+    (base) $ conda create --name cryodrgn python=3.13
     (cryodrgn) $ conda activate cryodrgn
 
     # install cryodrgn
@@ -372,7 +360,7 @@ Depending on the quality of the consensus reconstruction, image poses may contai
 Image poses may be *locally* refined using the `--do-pose-sgd` flag, however, we recommend reaching out to the
 developers for recommended training settings.
 
-For global pose optimization or ab initio reconstruction, please see our [cryoDRGN-AI](https://cryodrgnai.cs.princeton.edu/) method.
+For global pose optimization or *ab initio* reconstruction, please see our [cryoDRGN-AI](https://cryodrgnai.cs.princeton.edu/) method.
 
 ## 6. Analysis of results
 
@@ -567,13 +555,16 @@ Documentation: https://ez-lab.gitbook.io/cryodrgn/cryodrgn-conformational-landsc
 
 ## *Ab Initio* Reconstruction
 
-An early version of *ab initio* reconstruction was developed as cryoDRGN2 and available with the `cryodrgn abinit_het` and `cryodrgn abinit_homo` executables.
-The arguments are similar to `cryodrgn train_vae`, but the `--poses` argument is not required.
+CryoDRGN-AI is currently available through the `cryodrgn abinit` command. Please see the
+[corresponding manuscript](https://cryodrgnai.cs.princeton.edu/) for details on our latest version
+of *ab initio* reconstruction.
 
+An earlier version of *ab initio* reconstruction was developed as cryoDRGN2 and is still available with the
+`cryodrgn abinit_het_old` and `cryodrgn abinit_homo_old` executables.
 CryoDRGN2 documentation: https://ez-lab.gitbook.io/cryodrgn/cryodrgn2-ab-initio-reconstruction
 
-Please see the [cryoDRGN-AI](https://cryodrgnai.cs.princeton.edu/) manuscript and software for our latest version of *ab initio* reconstruction.
-CryoDRGN-AI is currently available as a standalone [tool](https://github.com/ml-struct-bio/drgnai), however, we are working on integrating cryoDRGN-AI into `cryodrgn` software version 4.0+.
+The arguments for all *ab initio* reconstruction commands are similar to `cryodrgn train_vae`,
+but the `--poses` argument is not required.
 
 ## CryoDRGN-ET for subtomogram analysis
 
@@ -594,7 +585,7 @@ For a description of our extension to heterogeneous subtomogram averaging, see:
 Ramya Rangan*, Ryan Feathers*, Sagar Khavnekar, Adam Lerer, Jake Johnston, Ron Kelley, Martin Obr, Abhay Kotecha, and Ellen D. Zhong
 Nature Methods, 2024, https://doi.org/10.1038/s41592-024-02340-4 [pdf](https://ezlab.cs.princeton.edu/assets/pdf/2024_cryodrgnet.pdf)
 
-For a description of our ab initio reconstruction method, see:
+For a description of our *ab initio* reconstruction method, see:
 
 * CryoDRGN-AI: neural ab initio reconstruction of challenging cryo-EM and cryo-ET datasets
 Axel Levy, Rishwanth Raghu, Ryan Feathers, Michal Grzadkowski, Frederic Poitevin, Jake D. Johnston, Francesca Vallese, Oliver B. Clarke, Gordon Wetzstein, and Ellen D. Zhong
@@ -606,7 +597,7 @@ A preliminary version of cryoDRGN was presented at ICLR 2020:
 Ellen D. Zhong, Tristan Bepler, Joseph H. Davis*, Bonnie Berger*
 ICLR 2020, Spotlight, https://arxiv.org/abs/1909.05215
 
-A preliminary version of ab initio reconstruction in cryoDRGN2 was presented at ICCV 2021:
+A preliminary version of *ab initio* reconstruction in cryoDRGN2 was presented at ICCV 2021:
 
 * CryoDRGN2: Ab Initio Neural Reconstruction of 3D Protein Structures From Real Cryo-EM Images
 Ellen D. Zhong, Adam Lerer, Joseph H Davis, and Bonnie Berger

@@ -31,7 +31,7 @@ pose_trans = torch.tensor(pose_trans.astype(np.float32) * (D - 1))
 
 
 def load_model(path):
-    ckpt = torch.load(path)
+    ckpt = torch.load(path, weights_only=False)
     model = models.get_decoder(3, D, 3, 256, "fourier", "geom_lowf")
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()

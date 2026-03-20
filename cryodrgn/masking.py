@@ -163,8 +163,8 @@ class FrequencyMarchingMask(CircularMask):
     def __init__(
         self,
         lattice: Lattice,
-        radius: int,
         radius_max: int,
+        radius: int = 3,
         add_one_every: int = 100000,
     ) -> None:
         super().__init__(lattice, radius)
@@ -192,8 +192,8 @@ class FrequencyMarchingExpMask(FrequencyMarchingMask):
     def __init__(
         self,
         lattice: Lattice,
-        radius: int,
         radius_max: int,
+        radius: int = 3,
         add_one_every: int = 100000,
         exp_factor=0.05,
     ) -> None:

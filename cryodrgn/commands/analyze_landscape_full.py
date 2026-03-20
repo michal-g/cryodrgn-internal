@@ -33,6 +33,7 @@ import cryodrgn
 from cryodrgn import config, utils
 from cryodrgn.lattice import Lattice
 from cryodrgn.models import HetOnlyVAE, ResidLinearMLP, get_decoder
+from cryodrgn.models_ai import HyperVolume, eval_volume_method as eval_volume_method_ai
 from cryodrgn.source import ImageSource
 
 logger = logging.getLogger(__name__)
@@ -218,9 +219,7 @@ def generate_and_map_volumes(zfile, cfg, weights, mask_mrc, pca_obj_pkl, outdir,
     cfg = config.update_config_v1(cfg)
     logger.info("Loaded configuration:")
     pprint.pprint(cfg)
-
     D = cfg["lattice_args"]["D"]  # image size + 1
-    norm = [float(x) for x in cfg["dataset_args"]["norm"]]
 
     # Load landscape analysis inputs
     mask = np.array(ImageSource.from_file(mask_mrc).images().cpu())
@@ -230,18 +229,58 @@ def generate_and_map_volumes(zfile, cfg, weights, mask_mrc, pca_obj_pkl, outdir,
         assert mask.shape == (args.downsample,) * 3
     else:
         assert mask.shape == (D - 1, D - 1, D - 1)
-    logger.info(f"{mask.sum()} voxels in the mask")
-
-    pca = utils.load_pkl(pca_obj_pkl)
 
     # Load model weights based on whether using encoder or autodecoder
+    logger.info(f"{mask.sum()} voxels in the mask")
     logger.info("Loading weights from {}".format(weights))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if "encode_mode" in cfg["model_args"]:
+
+    # cryodrgn abinit models
+    if "data_norm_mean" in cfg:
+        checkpoint = torch.load(weights, weights_only=False)
+        hypervolume_params = checkpoint["hypervolume_params"]
+        hypervolume = HyperVolume(**hypervolume_params)
+        hypervolume.load_state_dict(checkpoint["hypervolume_state_dict"])
+        hypervolume.eval()
+        hypervolume.to(device)
+        lattice = Lattice(
+            checkpoint["hypervolume_params"]["resolution"],
+            extent=0.5,
+            device=device,
+        )
+        norm = cfg["data_norm_mean"], cfg["data_norm_std"]
+        zdim = checkpoint["hypervolume_params"]["z_dim"]
+        radius_mask = (
+            checkpoint["output_mask_radius"]
+            if "output_mask_radius" in checkpoint
+            else None
+        )
+
+        def eval_volume_method(lattice, **eval_args):
+            if not isinstance(lattice, Lattice):
+                lattice = Lattice(eval_args["D"], extent=0.5, device=device)
+
+            return eval_volume_method_ai(
+                hypervolume,
+                lattice,
+                norm=norm,
+                z_dim=zdim,
+                zval=eval_args["zval"],
+                radius=radius_mask if radius_mask is not None else None,
+            )
+
+    # cryodrgn train_dec models
+    elif "encode_mode" in cfg["model_args"]:
         model, lattice = HetOnlyVAE.load(cfg, weights, device)
-        decoder = model.decoder
+        norm = [float(x) for x in cfg["dataset_args"]["norm"]]
+        model.decoder.to(device)
+        model.decoder.eval()
+        eval_volume_method = model.decoder.eval_volume
+
+    # cryodrgn train_nn, train_vae, abinit_homo_old, abinit_het_old models
     else:
         lattice = Lattice(D, extent=cfg["lattice_args"]["extent"], device=device)
+        norm = [float(x) for x in cfg["dataset_args"]["norm"]]
         activation = {"relu": nn.ReLU, "leaky_relu": nn.LeakyReLU}[
             cfg["model_args"]["activation"]
         ]
@@ -256,17 +295,15 @@ def generate_and_map_volumes(zfile, cfg, weights, mask_mrc, pca_obj_pkl, outdir,
             activation=activation,
             feat_sigma=cfg["model_args"]["feat_sigma"],
         )
+        decoder.to(device)
+        decoder.eval()
+        eval_volume_method = decoder.eval_volume
 
-    decoder.to(device)
-    decoder.eval()
-
-    # Set z
+    # Set z and generate volumes
+    pca = utils.load_pkl(pca_obj_pkl)
     z = z_sample.astype(np.float32)
-
-    # Generate volumes
     logger.info(f"Generating {len(z)} volume embeddings")
     t1 = dt.now()
-    embeddings = list()
 
     def generate_embeddings(i_list, z_list):
         embedding_list = list()
@@ -276,17 +313,20 @@ def generate_and_map_volumes(zfile, cfg, weights, mask_mrc, pca_obj_pkl, outdir,
                 logger.info(f"Generating volume {i + 1} of {len(z)}")
 
             if args.downsample:
-                extent = lattice.extent * (args.downsample / (D - 1))
-                vol = decoder.eval_volume(
+                vol = eval_volume_method(
                     lattice.get_downsample_coords(args.downsample + 1),
-                    args.downsample + 1,
-                    extent,
-                    norm,
-                    zz,
+                    D=args.downsample + 1,
+                    extent=lattice.extent * (args.downsample / (D - 1)),
+                    norm=norm,
+                    zval=zz,
                 )
             else:
-                vol = decoder.eval_volume(
-                    lattice.coords, lattice.D, lattice.extent, norm, zz
+                vol = eval_volume_method(
+                    lattice,
+                    D=lattice.D,
+                    extent=lattice.extent,
+                    norm=norm,
+                    zval=zz,
                 )
             if args.flip:
                 vol = vol.flip([0])
@@ -297,7 +337,7 @@ def generate_and_map_volumes(zfile, cfg, weights, mask_mrc, pca_obj_pkl, outdir,
 
         return np.concatenate(embedding_list, axis=0)
 
-    embeddings = generate_embeddings(list(range(len(z))), z)
+    embeddings = generate_embeddings(list[int](range(len(z))), z)
     embeddings = np.array(embeddings).reshape(len(z), -1).astype(np.float32)
     td = dt.now() - t1
     logger.info(f"Finished generating {args.training_volumes} volumes in {td}")
@@ -383,13 +423,13 @@ def main(args: argparse.Namespace) -> None:
 
     E = args.epoch
     workdir = args.workdir
+    if not os.path.exists(workdir):
+        raise FileNotFoundError(f"Work directory {workdir} not found!")
+
     zfile = os.path.join(workdir, f"z.{E}.pkl")
     weights = os.path.join(workdir, f"weights.{E}.pkl")
-    cfg = (
-        os.path.join(workdir, "config.yaml")
-        if os.path.exists(f"{workdir}/config.yaml")
-        else os.path.join(workdir, "config.pkl")
-    )
+    cfg_file = os.path.join(workdir, "config.yaml")
+    cfg = config.load(cfg_file)
     landscape_dir = (
         os.path.join(workdir, f"landscape.{E}")
         if args.landscape_dir is None

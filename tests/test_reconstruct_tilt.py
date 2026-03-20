@@ -13,8 +13,8 @@ from cryodrgn.commands import (
     analyze,
     backproject_voxel,
     train_vae,
-    abinit_homo,
-    abinit_het,
+    abinit_homo_old,
+    abinit_het_old,
     filter,
 )
 from cryodrgn.commands_utils import filter_star
@@ -355,9 +355,9 @@ class TestTiltAbinitHomo:
             args += ["--ind", indices.path]
 
         parser = argparse.ArgumentParser()
-        abinit_homo.add_args(parser)
+        abinit_homo_old.add_args(parser)
         args = parser.parse_args(args)
-        abinit_homo.main(args)
+        abinit_homo_old.main(args)
 
 
 @pytest.mark.skip(reason="Tilt-based abinit not implemented yet")
@@ -409,8 +409,8 @@ class TestTiltAbinitHetero:
             args += ["--ind", indices.path]
 
         parser = argparse.ArgumentParser()
-        abinit_het.add_args(parser)
-        abinit_het.main(parser.parse_args(args))
+        abinit_het_old.add_args(parser)
+        abinit_het_old.main(parser.parse_args(args))
 
         assert os.path.exists(os.path.join(outdir, "weights.3.pkl"))
         assert not os.path.exists(os.path.join(outdir, "weights.4.pkl"))
@@ -519,8 +519,8 @@ class TestTiltAbinitHetero:
             "1",
         ]
         parser = argparse.ArgumentParser()
-        abinit_het.add_args(parser)
-        abinit_het.main(parser.parse_args(args))
+        abinit_het_old.add_args(parser)
+        abinit_het_old.main(parser.parse_args(args))
         assert os.path.exists(os.path.join(outdir, "refiltered", "weights.2.pkl"))
         assert not os.path.exists(os.path.join(outdir, "refiltered", "weights.3.pkl"))
 

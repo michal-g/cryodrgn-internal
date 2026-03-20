@@ -2,11 +2,11 @@
 
 Example usage
 -------------
-# the default is to train for thirty epochs; here we train for fifty instead
+# The default is to train for thirty epochs; here we train for fifty instead
 $ cryodrgn abinit_het particles.mrcs -o cryodrgn-outs/003_abinit_het --zdim 4 \
                                      --ctf ctf.pkl -n 50
 
-# using .star particle input requires datadir argument pointing to image stacks
+# Using .star particle input requires datadir argument pointing to image stacks
 $ cryodrgn abinit_het particles.star --datadir path_to_images/ \
                                      -o cryodrgn-outs/004_abinit_het.10 --zdim 10 \
                                      --ctf ctf.pkl -n 50
@@ -438,7 +438,7 @@ def pretrain(model, lattice, optim, minibatch, tilt, zdim):
     model.train()
     optim.zero_grad()
 
-    rot = lie_tools.random_SO3(B, device=y.device)
+    rot = lie_tools.random_rotmat(B, device=y.device)
     z = torch.randn((B, zdim), device=y.device)
 
     # reconstruct circle of pixels instead of whole image
@@ -498,10 +498,7 @@ def train(
     # We do this in pose-supervised train_vae
 
     if scaler is not None:
-        try:
-            amp_mode = torch.amp.autocast("cuda")
-        except AttributeError:
-            amp_mode = torch.cuda.amp.autocast_mode.autocast()
+        amp_mode = torch.cuda.amp.autocast()
     else:
         amp_mode = contextlib.nullcontext()
 
@@ -630,11 +627,11 @@ def eval_z(
     )
 
     for minibatch in data_generator:
-        ind = minibatch[-1]
-        y = minibatch[0].to(device)
+        ind = minibatch["index"]
+        y = minibatch["y"].to(device)
         yt = None
         if use_tilt:
-            yt = minibatch[1].to(device)
+            yt = minibatch["tilt"].to(device)
         B = len(ind)
         D = lattice.D
         c = None
@@ -915,16 +912,13 @@ def main(args):
             model, optim = amp.initialize(model, optim, opt_level="O1")
         # mixed precision with pytorch (v1.6+)
         except:  # noqa: E722
-            try:
-                scaler = torch.amp.GradScaler("cuda")
-            except AttributeError:
-                scaler = torch.cuda.amp.grad_scaler.GradScaler()
+            scaler = torch.cuda.amp.GradScaler()
 
     sorted_poses = []
     if args.load:
         args.pretrain = 0
         logger.info("Loading checkpoint from {}".format(args.load))
-        checkpoint = torch.load(args.load)
+        checkpoint = torch.load(args.load, weights_only=False)
         model.load_state_dict(checkpoint["model_state_dict"])
         optim.load_state_dict(checkpoint["optimizer_state_dict"])
         start_epoch = checkpoint["epoch"] + 1
@@ -1003,11 +997,11 @@ def main(args):
     global_it = 0
     logger.info("Using random poses for {} iterations".format(args.pretrain))
     for batch in data_iterator:
-        global_it += len(batch[0])
+        global_it += len(batch["index"])
         batch = (
-            (batch[0].to(device), None)
+            (batch["y"].to(device), None)
             if tilt is None
-            else (batch[0].to(device), batch[1].to(device))
+            else (batch["y"].to(device), batch["tilt"].to(device))
         )
         loss = pretrain(model, lattice, optim, batch, tilt=ps.tilt, zdim=args.zdim)
         if global_it % args.log_interval == 0:
@@ -1058,12 +1052,12 @@ def main(args):
         if epoch % args.ps_freq != 1:
             logger.info("Using previous iteration poses")
         for batch in data_iterator:
-            ind = batch[-1]
+            ind = batch["index"]
             ind_np = ind.cpu().numpy()
             batch = (
-                (batch[0].to(device), None)
+                (batch["y"].to(device), None)
                 if tilt is None
-                else (batch[0].to(device), batch[1].to(device))
+                else (batch["y"].to(device), batch["tilt"].to(device))
             )
             batch_it += len(batch[0])
             global_it = Nimg * (epoch - 1) + batch_it

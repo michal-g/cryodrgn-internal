@@ -34,9 +34,11 @@ import argparse
 import yaml
 import re
 import logging
+from typing import Optional, Sequence
 
 import numpy as np
 import pandas as pd
+from scipy.spatial import transform
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib import colors
@@ -44,8 +46,13 @@ from matplotlib.backend_bases import MouseEvent, MouseButton
 from matplotlib.widgets import LassoSelector, RadioButtons, Button
 from matplotlib.path import Path as PlotPath
 from matplotlib.gridspec import GridSpec
-from scipy.spatial import transform
-from typing import Optional, Sequence
+
+try:
+    import matplotlib
+
+    matplotlib.use("TkAgg")
+except ImportError:
+    pass
 
 from cryodrgn import analysis, utils
 from cryodrgn.dataset import ImageDataset, TiltSeriesData

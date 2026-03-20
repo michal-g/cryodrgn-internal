@@ -408,7 +408,7 @@ class AbInitioDir:
         return train_args
 
     def train(self, load_epoch: Optional[int] = None) -> None:
-        train_cmd = "abinit_het" if self.zdim > 0 else "abinit_homo"
+        train_cmd = "abinit_het_old" if self.zdim > 0 else "abinit_homo_old"
 
         cmd = (
             f"cryodrgn {train_cmd} {self.particles} -o {self.outdir} "

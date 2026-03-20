@@ -344,11 +344,7 @@ def train(
 
     # Cast operations to mixed precision if using torch.cuda.amp.GradScaler()
     if scaler is not None:
-        try:
-            amp_mode = torch.amp.autocast("cuda")
-        except AttributeError:
-            amp_mode = torch.cuda.amp.autocast_mode.autocast()
-        with amp_mode:
+        with torch.cuda.amp.autocast():
             loss = run_model(y)
     else:
         loss = run_model(y)
@@ -582,10 +578,7 @@ def main(args: argparse.Namespace) -> None:
             model, optim = amp.initialize(model, optim, opt_level="O1")
         # Mixed precision with pytorch (v1.6+)
         except:  # noqa: E722
-            try:
-                scaler = torch.amp.GradScaler("cuda")
-            except AttributeError:
-                scaler = torch.cuda.amp.grad_scaler.GradScaler()
+            scaler = torch.cuda.amp.GradScaler()
 
     # parallelize
     if args.multigpu and torch.cuda.device_count() > 1:
@@ -611,19 +604,19 @@ def main(args: argparse.Namespace) -> None:
         t2 = dt.now()
         loss_accum = 0
         batch_it = 0
-        for batch, _, ind in data_generator:
-            batch_it += len(ind)
-            ind = ind.to(device)
+        for batch in data_generator:
+            batch_it += len(batch["index"])
+            ind = batch["index"].to(device)
             z_optim.zero_grad()
             if pose_optimizer is not None:
                 pose_optimizer.zero_grad()
-            r, t = posetracker.get_pose(ind)
+            r, t = posetracker.get_pose(batch["index"])
             c = ctf_params[ind] if ctf_params is not None else None
             loss_item = train(
                 model,
                 lattice,
                 optim,
-                batch.to(device),
+                batch["y"].to(device),
                 z[ind],
                 r,
                 t,
@@ -635,7 +628,7 @@ def main(args: argparse.Namespace) -> None:
                 z_optim.step()
             if pose_optimizer is not None and epoch >= args.pretrain_pose:
                 pose_optimizer.step()
-            loss_accum += loss_item * len(ind)
+            loss_accum += loss_item * len(batch["index"])
             if batch_it % args.log_interval < args.batch_size:
                 logger.info(
                     "# [Train Epoch: {}/{}] [{}/{} images] loss={:.6f}".format(

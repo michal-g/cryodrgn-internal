@@ -356,7 +356,7 @@ def pretrain(model, lattice, optim, batch, tilt=None):
         slice_ = model(lattice.coords[mask] @ R)
         return slice_.view(B, -1)
 
-    rot = lie_tools.random_SO3(B, device=y.device)
+    rot = lie_tools.random_rotmat(B, device=y.device)
 
     y = y.view(B, -1)[:, mask]
     if tilt is not None:
@@ -421,10 +421,7 @@ def train(
         )
 
     if scaler is not None:
-        try:
-            amp_mode = torch.amp.autocast("cuda")
-        except AttributeError:
-            amp_mode = torch.cuda.amp.autocast_mode.autocast()
+        amp_mode = torch.cuda.amp.autocast()
     else:
         amp_mode = contextlib.nullcontext()
 
@@ -671,16 +668,13 @@ def main(args: argparse.Namespace) -> None:
             model, optim = amp.initialize(model, optim, opt_level="O1")
         # mixed precision with pytorch (v1.6+)
         except:  # noqa: E722
-            try:
-                scaler = torch.amp.GradScaler("cuda")
-            except AttributeError:
-                scaler = torch.cuda.amp.grad_scaler.GradScaler()
+            scaler = torch.cuda.amp.GradScaler()
 
     sorted_poses = []
     if args.load:
         args.pretrain = 0
         logger.info("Loading checkpoint from {}".format(args.load))
-        checkpoint = torch.load(args.load)
+        checkpoint = torch.load(args.load, weights_only=False)
         model.load_state_dict(checkpoint["model_state_dict"])
         optim.load_state_dict(checkpoint["optimizer_state_dict"])
         start_epoch = checkpoint["epoch"] + 1
@@ -713,11 +707,11 @@ def main(args: argparse.Namespace) -> None:
     global_it = 0
     logger.info("Using random poses for {} iterations".format(args.pretrain))
     for batch in data_iterator:
-        global_it += len(batch[0])
+        global_it += len(batch["index"])
         batch = (
-            (batch[0].to(device), None)
+            (batch["y"].to(device), None)
             if tilt is None
-            else (batch[0].to(device), batch[1].to(device))
+            else (batch["y"].to(device), batch["tilt"].to(device))
         )
         loss = pretrain(model, lattice, optim, batch, tilt=ps.tilt)
         if global_it % args.log_interval < args.batch_size:
@@ -766,12 +760,12 @@ def main(args: argparse.Namespace) -> None:
         if epoch % args.ps_freq != 1:
             logger.info("Using previous iteration poses")
         for batch in data_iterator:
-            ind = batch[-1]
+            ind = batch["index"]
             ind_np = ind.cpu().numpy()
             batch = (
-                (batch[0].to(device), None)
+                (batch["y"].to(device), None)
                 if tilt is None
-                else (batch[0].to(device), batch[1].to(device))
+                else (batch["y"].to(device), batch["tilt"].to(device))
             )
             batch_it += len(batch[0])
 

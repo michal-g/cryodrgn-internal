@@ -3,33 +3,151 @@
 import pytest
 import argparse
 import os.path
-import shutil
 import pickle
 import numpy as np
 import nbformat
 from nbconvert.preprocessors import ExecutePreprocessor
-from cryodrgn.commands import analyze, eval_vol, filter, graph_traversal, abinit_het
+from cryodrgn.commands import (
+    analyze,
+    abinit,
+    analyze_landscape,
+    analyze_landscape_full,
+    filter,
+    graph_traversal,
+)
 
 
 @pytest.mark.parametrize(
     "particles, indices, ctf",
     [
-        ("hand", None, None),
+        ("hand", None, "CTF-Test.100"),
+        ("toy.txt", "random-100", "CTF-Test"),
+    ],
+    indirect=True,
+)
+class TestAbinitHomo:
+
+    model_args = [
+        "--zdim",
+        "0",
+        "--lr",
+        ".001",
+        "--dim",
+        "16",
+        "--layers",
+        "2",
+        "--pe-dim",
+        "4",
+        "--t-extent",
+        "4.0",
+        "--t-ngrid",
+        "2",
+        "--nkeptposes",
+        "4",
+    ]
+
+    def get_outdir(self, tmpdir_factory, particles, ctf, indices):
+        dirname = os.path.join("AbinitHomo", particles.label, ctf.label, indices.label)
+        odir = os.path.join(tmpdir_factory.getbasetemp(), dirname)
+        os.makedirs(odir, exist_ok=True)
+
+        return odir
+
+    def test_train_model(self, tmpdir_factory, particles, ctf, indices):
+        """Train the initial homogeneous model."""
+
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        args = [
+            particles.path,
+            "-o",
+            outdir,
+            *self.model_args,
+            "--num-epochs",
+            "3",
+            "--epochs-pose-search",
+            "1",
+            "--n-imgs-pretrain",
+            "10",
+            "--no-analysis",
+            "--checkpoint",
+            "1",
+        ]
+        if ctf.path is not None:
+            args += ["--ctf", ctf.path]
+        if indices.path is not None:
+            args += ["--ind", indices.path]
+
+        parser = argparse.ArgumentParser()
+        abinit.add_args(parser)
+        abinit.main(parser.parse_args(args))
+
+        assert os.path.exists(os.path.join(outdir, "weights.2.pkl"))
+        assert os.path.exists(os.path.join(outdir, "weights.3.pkl"))
+        assert not os.path.exists(os.path.join(outdir, "analyze.2"))
+        assert not os.path.exists(os.path.join(outdir, "analyze.3"))
+
+    def test_load_checkpoint(self, tmpdir_factory, particles, ctf, indices):
+        """Load a checkpoint and continue training."""
+
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        new_outdir = os.path.join(outdir, "checkpoint")
+        parser = argparse.ArgumentParser()
+        abinit.add_args(parser)
+        args = [
+            particles.path,
+            "-o",
+            new_outdir,
+            "--load",
+            os.path.join(outdir, "weights.3.pkl"),
+            *self.model_args,
+            "--num-epochs",
+            "5",
+            "--checkpoint",
+            "3",
+        ]
+        if ctf.path is not None:
+            args += ["--ctf", ctf.path]
+        if indices.path is not None:
+            args += ["--ind", indices.path]
+
+        abinit.main(parser.parse_args(args))
+        assert not os.path.exists(os.path.join(new_outdir, "weights.4.pkl"))
+        assert os.path.exists(os.path.join(new_outdir, "weights.5.pkl"))
+        assert not os.path.exists(os.path.join(new_outdir, "analyze.4"))
+        assert os.path.exists(os.path.join(new_outdir, "analyze.5"))
+
+
+@pytest.mark.parametrize(
+    "particles, indices, ctf",
+    [
         ("hand", None, "CTF-Test.100"),
         ("toy.txt", "random-100", "CTF-Test"),
         ("toy.star", "first-100", "CTF-Test"),
-        ("toy.star-13", None, None),
     ],
     indirect=True,
-    ids=[
-        "hand,no.ind,no.ctf",
-        "hand,no.ind,with.ctf",
-        "toy.txt,ind.rand.100,with.ctf",
-        "toy.star,ind.f100,with.ctf",
-        "toy.star-13,no.ind,no.ctf",
-    ],
+    ids=["hand,no.ind", "toy.txt,ind.rand.100", "toy.star,ind.f100"],
 )
 class TestAbinitHetero:
+
+    model_args = [
+        "--zdim",
+        "4",
+        "--lr",
+        ".001",
+        "--dim",
+        "16",
+        "--layers",
+        "2",
+        "--pe-dim",
+        "4",
+        "--t-extent",
+        "4.0",
+        "--t-ngrid",
+        "2",
+        "--nkeptposes",
+        "4",
+    ]
+
     def get_outdir(self, tmpdir_factory, particles, ctf, indices):
         dirname = os.path.join("AbinitHet", particles.label, ctf.label, indices.label)
         odir = os.path.join(tmpdir_factory.getbasetemp(), dirname)
@@ -45,32 +163,16 @@ class TestAbinitHetero:
             particles.path,
             "-o",
             outdir,
-            "--zdim",
-            "4",
-            "--lr",
-            ".0001",
-            "--enc-dim",
-            "8",
-            "--enc-layers",
-            "2",
-            "--dec-dim",
-            "8",
-            "--dec-layers",
-            "2",
-            "--pe-dim",
-            "8",
-            "--enc-only",
-            "--t-extent",
-            "4.0",
-            "--t-ngrid",
-            "2",
-            "--pretrain",
-            "1",
+            *self.model_args,
             "--num-epochs",
             "3",
-            "--ps-freq",
-            "2",
+            "--epochs-pose-search",
+            "1",
+            "--n-imgs-pretrain",
+            "10",
             "--no-analysis",
+            "--checkpoint",
+            "1",
         ]
         if ctf.path is not None:
             args += ["--ctf", ctf.path]
@@ -78,14 +180,18 @@ class TestAbinitHetero:
             args += ["--ind", indices.path]
 
         parser = argparse.ArgumentParser()
-        abinit_het.add_args(parser)
-        abinit_het.main(parser.parse_args(args))
+        abinit.add_args(parser)
+        abinit.main(parser.parse_args(args))
+
+        assert os.path.exists(os.path.join(outdir, "weights.2.pkl"))
+        assert os.path.exists(os.path.join(outdir, "weights.3.pkl"))
         assert not os.path.exists(os.path.join(outdir, "analyze.2"))
+        assert not os.path.exists(os.path.join(outdir, "analyze.3"))
 
     @pytest.mark.parametrize(
         "epoch, vol_start_index",
-        [(2, 1), (1, 0)],
-        ids=["epoch.2,volstart.1", "epoch.1,volstart.0"],
+        [(3, 1), (2, 1)],
+        ids=["epoch.3,volstart.1", "epoch.2,volstart.1"],
     )
     def test_analyze(
         self, tmpdir_factory, particles, ctf, indices, epoch, vol_start_index
@@ -117,7 +223,69 @@ class TestAbinitHetero:
             os.path.join(kmeans_dir, f"vol_{(10 + vol_start_index):03d}.mrc")
         )
 
-    @pytest.mark.parametrize("nb_lbl", ["cryoDRGN_figures"])
+    def test_load_checkpoint(self, tmpdir_factory, particles, ctf, indices):
+        """Load a checkpoint and continue training."""
+
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        new_outdir = os.path.join(outdir, "checkpoint")
+        parser = argparse.ArgumentParser()
+        abinit.add_args(parser)
+        args = [
+            particles.path,
+            "-o",
+            new_outdir,
+            "--load",
+            os.path.join(outdir, "weights.3.pkl"),
+            *self.model_args,
+            "--num-epochs",
+            "5",
+            "--checkpoint",
+            "3",
+        ]
+        if ctf.path is not None:
+            args += ["--ctf", ctf.path]
+        if indices.path is not None:
+            args += ["--ind", indices.path]
+
+        abinit.main(parser.parse_args(args))
+        assert not os.path.exists(os.path.join(new_outdir, "weights.4.pkl"))
+        assert os.path.exists(os.path.join(new_outdir, "weights.5.pkl"))
+        assert not os.path.exists(os.path.join(new_outdir, "analyze.4"))
+        assert os.path.exists(os.path.join(new_outdir, "analyze.5"))
+
+    def test_load_poses(self, tmpdir_factory, particles, ctf, indices):
+        """Load poses and continue training."""
+
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        new_outdir = os.path.join(outdir, "checkpoint-poses")
+        parser = argparse.ArgumentParser()
+        abinit.add_args(parser)
+        args = [
+            particles.path,
+            "-o",
+            new_outdir,
+            "--load-poses",
+            os.path.join(outdir, "pose.1.pkl"),
+            *self.model_args,
+            "--num-epochs",
+            "4",
+            "--epochs-pose-search",
+            "2",
+            "--checkpoint",
+            "2",
+            "--no-analysis",
+        ]
+        if ctf.path is not None:
+            args += ["--ctf", ctf.path]
+        if indices.path is not None:
+            args += ["--ind", indices.path]
+
+        abinit.main(parser.parse_args(args))
+        assert not os.path.exists(os.path.join(new_outdir, "weights.3.pkl"))
+        assert os.path.exists(os.path.join(new_outdir, "weights.4.pkl"))
+        assert not os.path.exists(os.path.join(new_outdir, "analyze.4"))
+
+    @pytest.mark.parametrize("nb_lbl", ["cryoDRGN_figures", "cryoDRGN_filtering"])
     def test_notebooks(self, tmpdir_factory, particles, ctf, indices, nb_lbl):
         """Execute the demonstration Jupyter notebooks produced by analysis."""
 
@@ -183,54 +351,65 @@ class TestAbinitHetero:
             assert not os.path.exists(os.path.join(sel_dir, "indices.pkl"))
             assert not os.path.exists(os.path.join(sel_dir, "indices_inverse.pkl"))
 
-    @pytest.mark.parametrize("epoch", [2, 3], ids=["epoch.2", "epoch.3"])
-    def test_graph_traversal(self, tmpdir_factory, particles, ctf, indices, epoch):
+    def test_graph_traversal(self, tmpdir_factory, particles, ctf, indices):
         outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
         parser = argparse.ArgumentParser()
         graph_traversal.add_args(parser)
         args = parser.parse_args(
             [
-                os.path.join(outdir, f"z.{epoch}.pkl"),
+                os.path.join(outdir, "z.3.pkl"),
                 "--anchors",
+                "3",
                 "5",
-                "2",
-                "10",
+                "8",
                 "--max-neighbors",
-                "100",
+                "50",
                 "--avg-neighbors",
-                "100",
+                "50",
                 "--outind",
-                os.path.join(outdir, f"graph_traversal_path.{epoch}.txt"),
+                os.path.join(outdir, "graph_traversal_path.3.txt"),
                 "--outtxt",
-                os.path.join(outdir, f"graph_traversal_zpath.{epoch}.txt"),
+                os.path.join(outdir, "graph_traversal_zpath.3.txt"),
             ]
         )
         graph_traversal.main(args)
 
-    def test_eval_volume(self, tmpdir_factory, particles, ctf, indices):
+    def test_analyze_landscape(self, tmpdir_factory, particles, ctf, indices):
         outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
         parser = argparse.ArgumentParser()
-        eval_vol.add_args(parser)
+        analyze_landscape.add_args(parser)
         args = parser.parse_args(
             [
-                os.path.join(outdir, "weights.3.pkl"),
-                "--config",
-                os.path.join(outdir, "config.yaml"),
-                "--zfile",
-                os.path.join(outdir, "graph_traversal_zpath.3.txt"),
-                "-o",
-                os.path.join(outdir, "eval_vols"),
+                outdir,
+                "3",
+                "--sketch-size",
+                "10",
+                "-M",
+                "3",
+                "--pc-dim",
+                "5",
+                "--downsample",
+                "64",
             ]
         )
-        eval_vol.main(args)
+        analyze_landscape.main(args)
 
-        shutil.rmtree(outdir)
+        assert os.path.exists(os.path.join(outdir, "landscape.3"))
+        assert os.path.exists(os.path.join(outdir, "landscape.3", "umap.pkl"))
+        assert os.path.exists(os.path.join(outdir, "landscape.3", "vol_pca_obj.pkl"))
+        assert os.path.exists(os.path.join(outdir, "landscape.3", "kmeans10"))
+        for i in range(1, 11):
+            assert os.path.exists(
+                os.path.join(outdir, "landscape.3", "kmeans10", f"vol_{i:03d}.mrc")
+            )
 
+    def test_analyze_landscape_full(self, tmpdir_factory, particles, ctf, indices):
+        outdir = self.get_outdir(tmpdir_factory, particles, indices, ctf)
+        parser = argparse.ArgumentParser()
+        analyze_landscape_full.add_args(parser)
+        args = parser.parse_args([outdir, "3", "-N", "10", "--downsample", "64"])
+        analyze_landscape_full.main(args)
 
-@pytest.mark.parametrize(
-    "abinit_dir", [{"zdim": zdim} for zdim in [0, 4, 8]], indirect=True
-)
-def test_abinit_checkpoint_analysis_and_backproject(abinit_dir):
-    abinit_dir.train()
-    abinit_dir.train(load_epoch=1)
-    abinit_dir.backproject()
+        landfull_dir = os.path.join(outdir, "landscape.3", "landscape_full")
+        assert os.path.exists(os.path.join(landfull_dir, "vol_pca_sampled.pkl"))
+        assert os.path.exists(os.path.join(landfull_dir, "z.sampled.pkl"))
